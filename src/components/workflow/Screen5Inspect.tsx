@@ -151,11 +151,12 @@ export const Screen5Inspect: React.FC<Screen5InspectProps> = ({
       );
 
       const terrain = L.tileLayer(
-        'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        'https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
         {
-          subdomains: 'abc',
-          maxZoom: 17,
-          attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap (CC-BY-SA)',
+          subdomains: ['0', '1', '2', '3'],
+          maxZoom: 20,
+          maxNativeZoom: 18,
+          attribution: 'Map data © Google Terrain',
         }
       );
 

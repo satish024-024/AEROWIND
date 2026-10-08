@@ -161,6 +161,7 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
   modeRef.current = mode;
   const drawnPointsRef = useRef(drawnPoints);
   drawnPointsRef.current = drawnPoints;
+  const handleClosePolygonRef = useRef<() => void>(() => {});
 
   // 1. Load Initial Hotspots
   useEffect(() => {
@@ -276,7 +277,7 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
     const L = window.L;
     if (!map || !L) return;
 
-    if (modeRef.current === 'draw') {
+    if (modeRef.current === 'draw' && !customBoundary) {
       return;
     }
 
@@ -361,6 +362,7 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
 
   // Fly/re-center map and update boundary polygon whenever site coordinates update
   useEffect(() => {
+    if (mode === 'draw') return; // Do not interrupt active lasso drawing
     const map = mapRef.current;
     if (!map) return;
     map.setView([site.lat, site.lon], 12);
@@ -368,7 +370,63 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
     setTimeout(() => {
       try { map.invalidateSize(); } catch (_) {}
     }, 150);
-  }, [site.lat, site.lon, site.areaKm2, site.boundary, renderBoundary]);
+  }, [site.lat, site.lon, site.areaKm2, site.boundary, renderBoundary, mode]);
+
+  // Close Custom Drawn Polygon (Photoshop Lasso)
+  const handleClosePolygon = useCallback(() => {
+    const pts = drawnPointsRef.current.length >= 3 ? drawnPointsRef.current : drawnPoints;
+    if (pts.length < 3) return;
+
+    // Ensure closed loop for GIS calculations
+    const closedPts: [number, number][] = [...pts];
+    if (
+      closedPts[0][0] !== closedPts[closedPts.length - 1][0] ||
+      closedPts[0][1] !== closedPts[closedPts.length - 1][1]
+    ) {
+      closedPts.push([closedPts[0][0], closedPts[0][1]]);
+    }
+
+    const areaKm2 = calculatePolygonAreaKm2(pts);
+    const perimKm = calculatePolygonPerimeterKm(pts);
+    const centerLat = parseFloat((pts.reduce((sum, v) => sum + v[0], 0) / pts.length).toFixed(6));
+    const centerLon = parseFloat((pts.reduce((sum, v) => sum + v[1], 0) / pts.length).toFixed(6));
+
+    if (drawnPolylineRef.current && mapRef.current) {
+      try { mapRef.current.removeLayer(drawnPolylineRef.current); } catch (_) {}
+      drawnPolylineRef.current = null;
+    }
+    drawnMarkersRef.current.forEach((m) => {
+      try { mapRef.current?.removeLayer(m); } catch (_) {}
+    });
+    drawnMarkersRef.current = [];
+    if (rubberbandPolylineRef.current && mapRef.current) {
+      try { mapRef.current.removeLayer(rubberbandPolylineRef.current); } catch (_) {}
+      rubberbandPolylineRef.current = null;
+    }
+
+    // Switch mode immediately in ref and state so renderBoundary is never blocked
+    modeRef.current = 'search';
+    setDrawnPoints([]);
+    setDrawStats(null);
+    setMode('search');
+    onToggleDrawMode(false);
+
+    // Render new boundary cleanly
+    renderBoundary(centerLat, centerLon, areaKm2, closedPts);
+
+    onSiteChange({
+      ...site,
+      lat: centerLat,
+      lon: centerLon,
+      areaKm2,
+      perimeterKm: perimKm,
+      boundary: closedPts,
+      name: `Custom Wind Farm Parcel (${areaKm2.toFixed(1)} km²)`,
+      shortName: `Custom Parcel`,
+    });
+  }, [calculatePolygonAreaKm2, calculatePolygonPerimeterKm, drawnPoints, onSiteChange, onToggleDrawMode, renderBoundary, site]);
+
+  handleClosePolygonRef.current = handleClosePolygon;
 
   // 7. Initialize Direct CDN Leaflet Map
   useEffect(() => {
@@ -393,7 +451,7 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
         tap: false, // Critical for mobile touch clicks in Android Chrome & iOS Safari
       });
 
-      // Resilient Multi-CDN Tile Layers (Google Hybrid, CartoDB Voyager / OpenStreetMap, OpenTopoMap)
+      // Resilient Multi-CDN Tile Layers (Google Hybrid Satellite, Google Roadmap / ESRI Street, Google Terrain / ESRI Topo)
       const satellite = L.tileLayer(
         'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
         {
@@ -405,22 +463,57 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
       );
 
       const street = L.tileLayer(
-        'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+        'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
         {
-          subdomains: 'abcd',
-          maxZoom: 19,
-          attribution: '© OpenStreetMap contributors © CARTO',
+          subdomains: ['0', '1', '2', '3'],
+          maxZoom: 20,
+          maxNativeZoom: 19,
+          attribution: 'Map data © Google Maps',
         }
       );
 
       const terrain = L.tileLayer(
-        'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        'https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
         {
-          subdomains: 'abc',
-          maxZoom: 17,
-          attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap (CC-BY-SA)',
+          subdomains: ['0', '1', '2', '3'],
+          maxZoom: 20,
+          maxNativeZoom: 18,
+          attribution: 'Map data © Google Terrain',
         }
       );
+
+      // Resilient Standby Fallbacks (ESRI World Street Map & ESRI World Topo Map - Verified 100% Free, No Watermark)
+      const streetFallback = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+          attribution: 'Tiles © Esri Street',
+        }
+      );
+
+      const terrainFallback = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+          attribution: 'Tiles © Esri Topo',
+        }
+      );
+
+      street.on('tileerror', () => {
+        if (!map._hasStreetFallback && map.hasLayer(street)) {
+          map._hasStreetFallback = true;
+          try { map.removeLayer(street); } catch (_) {}
+          streetFallback.addTo(map);
+        }
+      });
+
+      terrain.on('tileerror', () => {
+        if (!map._hasTerrainFallback && map.hasLayer(terrain)) {
+          map._hasTerrainFallback = true;
+          try { map.removeLayer(terrain); } catch (_) {}
+          terrainFallback.addTo(map);
+        }
+      });
 
       baseLayersRef.current = { satellite, street, terrain };
 
@@ -463,13 +556,26 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
             const dLat = Math.abs(first[0] - lat);
             const dLng = Math.abs(first[1] - lng);
             if (dLat < 0.003 && dLng < 0.003) {
-              handleClosePolygon();
+              handleClosePolygonRef.current();
               return;
             }
           }
           setDrawnPoints((prev) => [...prev, [lat, lng]]);
         } else {
           handleDirectMapSelection(lat, lng);
+        }
+      });
+
+      // Double-click to enclose polygon
+      map.on('dblclick', (e: any) => {
+        if (modeRef.current === 'draw' && drawnPointsRef.current.length >= 3) {
+          try {
+            if (e.originalEvent) {
+              e.originalEvent.stopPropagation();
+              e.originalEvent.preventDefault();
+            }
+          } catch (_) {}
+          handleClosePolygonRef.current();
         }
       });
 
@@ -653,8 +759,16 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
         });
       });
 
-      m.on('click', () => {
-        if (isFirst) handleClosePolygon();
+      m.on('click', (e: any) => {
+        try {
+          if (e.originalEvent) {
+            e.originalEvent.stopPropagation();
+            e.originalEvent.preventDefault();
+          }
+        } catch (_) {}
+        if (isFirst) {
+          handleClosePolygonRef.current();
+        }
       });
 
       m.on('contextmenu', (e: any) => {
@@ -1182,43 +1296,6 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
     renderBoundary(site.lat, site.lon, areaKm2, vertices);
   };
 
-  // Close Custom Drawn Polygon (Photoshop Lasso)
-  const handleClosePolygon = () => {
-    if (drawnPoints.length < 3) return;
-    const areaKm2 = calculatePolygonAreaKm2(drawnPoints);
-    const perimKm = calculatePolygonPerimeterKm(drawnPoints);
-    const centerLat = drawnPoints.reduce((sum, v) => sum + v[0], 0) / drawnPoints.length;
-    const centerLon = drawnPoints.reduce((sum, v) => sum + v[1], 0) / drawnPoints.length;
-
-    onSiteChange({
-      ...site,
-      lat: centerLat,
-      lon: centerLon,
-      areaKm2,
-      perimeterKm: perimKm,
-      boundary: drawnPoints,
-      name: `Custom Wind Farm Parcel (${areaKm2.toFixed(1)} km²)`,
-      shortName: `Custom Parcel`,
-    });
-
-    if (drawnPolylineRef.current && mapRef.current) {
-      try { mapRef.current.removeLayer(drawnPolylineRef.current); } catch (_) {}
-      drawnPolylineRef.current = null;
-    }
-    drawnMarkersRef.current.forEach((m) => {
-      try { mapRef.current?.removeLayer(m); } catch (_) {}
-    });
-    drawnMarkersRef.current = [];
-    if (rubberbandPolylineRef.current && mapRef.current) {
-      try { mapRef.current.removeLayer(rubberbandPolylineRef.current); } catch (_) {}
-      rubberbandPolylineRef.current = null;
-    }
-
-    renderBoundary(centerLat, centerLon, areaKm2, drawnPoints);
-    setDrawnPoints([]);
-    setMode('search');
-    onToggleDrawMode(false);
-  };
 
   // Manual Coordinates Submit
   const handleApplyCoordinates = () => {
@@ -1503,7 +1580,7 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
               data-layer="street"
               id="btn-layer-osm"
               className={`map-layer-btn px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                activeBaseLayer === 'street' && !is3DActive ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300'
+                activeBaseLayer === 'street' && !is3DActive ? 'bg-[#FFD21F] text-slate-950 font-black shadow-xs' : 'text-slate-600 dark:text-slate-300'
               }`}
             >
               Map
@@ -1513,7 +1590,7 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
               data-layer="terrain"
               id="btn-layer-terrain"
               className={`map-layer-btn px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                activeBaseLayer === 'terrain' && !is3DActive ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300'
+                activeBaseLayer === 'terrain' && !is3DActive ? 'bg-[#FFD21F] text-slate-950 font-black shadow-xs' : 'text-slate-600 dark:text-slate-300'
               }`}
             >
               Terrain
@@ -1720,7 +1797,12 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
 
         {/* ── PHOTOSHOP LASSO IN-CANVAS FLOATING TOOLBAR ── */}
         {mode === 'draw' && (
-          <div className="absolute bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[1060] flex items-center gap-1.5 sm:gap-2 px-3.5 py-2 rounded-full bg-slate-950/90 text-white backdrop-blur-2xl border border-white/20 shadow-2xl pointer-events-auto max-w-[95vw] overflow-x-auto no-scrollbar">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            className="absolute bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[1060] flex items-center gap-1.5 sm:gap-2 px-3.5 py-2 rounded-full bg-slate-950/90 text-white backdrop-blur-2xl border border-white/20 shadow-2xl pointer-events-auto max-w-[95vw] overflow-x-auto no-scrollbar"
+          >
             <span className="flex items-center gap-1.5 text-xs font-bold whitespace-nowrap">
               <span className="w-2 h-2 rounded-full bg-[#FFD21F] animate-ping" />
               <span>Lasso: {drawnPoints.length} vertices</span>
@@ -1742,7 +1824,11 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
               type="button"
               id="btn-close-polygon-draw"
               disabled={drawnPoints.length < 3}
-              onClick={handleClosePolygon}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                handleClosePolygon();
+              }}
               className="px-3 py-1 rounded-full bg-[#FFD21F] hover:bg-[#F2C50F] text-slate-950 font-black text-xs disabled:opacity-40 transition-all active:scale-95 flex items-center gap-1 whitespace-nowrap cursor-pointer"
             >
               <Check className="w-3 h-3 stroke-[3]" />
@@ -1753,7 +1839,10 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
               type="button"
               id="btn-undo-polygon-draw"
               disabled={drawnPoints.length === 0}
-              onClick={() => setDrawnPoints((pts) => pts.slice(0, -1))}
+              onClick={(e) => {
+                e.stopPropagation();
+                setDrawnPoints((pts) => pts.slice(0, -1));
+              }}
               className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold whitespace-nowrap cursor-pointer disabled:opacity-40"
               title="Undo last placed vertex"
             >
@@ -1763,7 +1852,11 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
             <button
               type="button"
               id="btn-clear-polygon-draw"
-              onClick={() => setDrawnPoints([])}
+              onClick={(e) => {
+                e.stopPropagation();
+                setDrawnPoints([]);
+                setDrawStats(null);
+              }}
               className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold whitespace-nowrap cursor-pointer"
             >
               Clear
@@ -1772,8 +1865,11 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
             <button
               type="button"
               id="btn-cancel-polygon-draw"
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 setDrawnPoints([]);
+                setDrawStats(null);
+                modeRef.current = 'search';
                 setMode('search');
                 onToggleDrawMode(false);
                 renderBoundary(site.lat, site.lon, site.areaKm2, site.boundary as [number, number][]);
@@ -1803,7 +1899,7 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
             data-layer="street"
             id="btn-layer-osm-desktop"
             className={`map-layer-btn px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all ${
-              activeBaseLayer === 'street' && !is3DActive ? 'bg-slate-950 text-white shadow-xs' : 'text-slate-700 dark:text-slate-300 hover:bg-white/50'
+              activeBaseLayer === 'street' && !is3DActive ? 'bg-[#FFD21F] text-slate-950 font-black shadow-xs' : 'text-slate-700 dark:text-slate-300 hover:bg-white/50'
             }`}
           >
             Map
@@ -1813,7 +1909,7 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
             data-layer="terrain"
             id="btn-layer-terrain-desktop"
             className={`map-layer-btn px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all ${
-              activeBaseLayer === 'terrain' && !is3DActive ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-700 dark:text-slate-300 hover:bg-white/50'
+              activeBaseLayer === 'terrain' && !is3DActive ? 'bg-[#FFD21F] text-slate-950 font-black shadow-xs' : 'text-slate-700 dark:text-slate-300 hover:bg-white/50'
             }`}
           >
             Terrain
@@ -1967,10 +2063,15 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
                 onClick={(e) => {
                   e.stopPropagation();
                   const r = selectedRadius || site.radiusKm || 3.0;
-                  const boundary = site.boundary && site.boundary.length >= 3 ? site.boundary : generateCircleVertices(site.lat, site.lon, r);
-                  const areaKm2 = site.areaKm2 || Math.round(Math.PI * r * r * 10) / 10;
+                  const pts = (drawnPointsRef.current.length >= 3 ? drawnPointsRef.current : (drawnPoints.length >= 3 ? drawnPoints : null));
+                  const boundary = pts ? pts : (site.boundary && site.boundary.length >= 3 ? site.boundary : generateCircleVertices(site.lat, site.lon, r));
+                  const areaKm2 = pts ? calculatePolygonAreaKm2(pts) : (site.areaKm2 || Math.round(Math.PI * r * r * 10) / 10);
+                  const centerLat = pts ? parseFloat((pts.reduce((s, v) => s + v[0], 0) / pts.length).toFixed(6)) : site.lat;
+                  const centerLon = pts ? parseFloat((pts.reduce((s, v) => s + v[1], 0) / pts.length).toFixed(6)) : site.lon;
                   onConfirmSite({
                     ...site,
+                    lat: centerLat,
+                    lon: centerLon,
                     radiusKm: r,
                     areaKm2,
                     boundary,
@@ -2428,10 +2529,15 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
                 size="md"
                 onClick={() => {
                   const r = selectedRadius || site.radiusKm || 3.0;
-                  const boundary = site.boundary && site.boundary.length >= 3 ? site.boundary : generateCircleVertices(site.lat, site.lon, r);
-                  const areaKm2 = site.areaKm2 || Math.round(Math.PI * r * r * 10) / 10;
+                  const pts = (drawnPointsRef.current.length >= 3 ? drawnPointsRef.current : (drawnPoints.length >= 3 ? drawnPoints : null));
+                  const boundary = pts ? pts : (site.boundary && site.boundary.length >= 3 ? site.boundary : generateCircleVertices(site.lat, site.lon, r));
+                  const areaKm2 = pts ? calculatePolygonAreaKm2(pts) : (site.areaKm2 || Math.round(Math.PI * r * r * 10) / 10);
+                  const centerLat = pts ? parseFloat((pts.reduce((s, v) => s + v[0], 0) / pts.length).toFixed(6)) : site.lat;
+                  const centerLon = pts ? parseFloat((pts.reduce((s, v) => s + v[1], 0) / pts.length).toFixed(6)) : site.lon;
                   onConfirmSite({
                     ...site,
+                    lat: centerLat,
+                    lon: centerLon,
                     radiusKm: r,
                     areaKm2,
                     boundary,

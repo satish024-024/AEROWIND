@@ -150,11 +150,10 @@ export const Screen3Layout: React.FC<Screen3LayoutProps> = ({
       );
 
       const streetFallback = L.tileLayer(
-        'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
         {
-          subdomains: 'abcd',
           maxZoom: 19,
-          attribution: '© OpenStreetMap contributors © CARTO',
+          attribution: 'Tiles © Esri Street',
         }
       );
 
