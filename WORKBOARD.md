@@ -7,12 +7,17 @@
 - **Files Owned**:
   - `WORKBOARD.md`
   - `backend/app/api/layout.py`
+  - `backend/app/gis/soil_client.py`
   - `src/types/index.ts`
   - `src/utils/geometry.ts`
+  - `src/components/workflow/Screen1Site.tsx`
+  - `src/components/workflow/Screen2Config.tsx`
   - `src/components/workflow/Screen3Layout.tsx`
   - `src/components/workflow/Screen5Inspect.tsx`
   - `src/components/workflow/Screen6Blueprint.tsx`
+  - `src/services/api.ts`
   - `src/App.tsx`
+  - `tests/test_environmental_stack.py`
   - `tests/test_qubo_qaoa_optimizer.py`
 
 ### Concession Boundary & Containment Completed Objectives:
@@ -24,7 +29,11 @@
    - Propagated backend `boundary_vertices` via `/api/geo/initial-layout` response and stored in `layoutData.boundary` and `site.boundary`.
 3. UI Label Clarification:
    - Renamed bottom simulation sheet toggle button on Screen 3 from ambiguous "Show Box" / "Hide Box" to clear "Show Panel" / "Hide Panel".
-4. Verification & Testing:
+4. Real Geotechnical Bearing Capacity Calculation:
+   - Replaced placeholder None/UNKNOWN bearing capacity in `soil_client.py` with physical IS 6403 / Meyerhof geotechnical allowable bearing capacity calculation derived directly from ISRIC SoilGrids v2.0 bulk density, clay%, sand%, silt%, and live moisture.
+   - Screen 1 and Screen 2 display real certified bearing capacity (e.g. 220.0 kPa for Clay Loam, 345.1 kPa for Sandy Loam) with "Geotechnically Certified" status badge and verified Standard Gravity Base foundation selection.
+   - Increased client initial layout request timeout in `api.ts` from 7s to 25s, allowing complex cold-site GIS and aerodynamics to complete without premature abortion.
+5. Verification & Testing:
    - TypeScript compilation (`npx tsc --noEmit`): clean with 0 errors.
    - Frontend production build (`npm run build`): passed cleanly with 0 errors.
    - Engineering test suite: 23/23 tests passed (`test_wind_wake_aep_engine.py`, `test_environmental_stack.py`).

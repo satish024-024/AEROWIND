@@ -508,10 +508,10 @@ export async function generateInitialLayout(payload: any): Promise<any> {
   let res: Response | null = null;
   let fetchError: any = null;
 
-  // 1. Try standard API_BASE route with 7-second timeout
+  // 1. Try standard API_BASE route with 25-second timeout
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 7000);
+    const timer = setTimeout(() => controller.abort(), 25000);
     res = await fetch(`${API_BASE}/geo/initial-layout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -521,14 +521,14 @@ export async function generateInitialLayout(payload: any): Promise<any> {
     clearTimeout(timer);
   } catch (err) {
     fetchError = err;
-    console.warn('Initial layout fetch via proxy failed/timed out, attempting direct backend:', err);
+    console.warn('Initial layout fetch via proxy encountered network delay, trying direct backend:', err);
   }
 
   // 2. Fall back directly to Railway if proxy failed or returned gateway error (502/504)
   if (!res || !res.ok) {
     try {
       const directController = new AbortController();
-      const directTimer = setTimeout(() => directController.abort(), 12000);
+      const directTimer = setTimeout(() => directController.abort(), 30000);
       const directRes = await fetch(RAILWAY_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

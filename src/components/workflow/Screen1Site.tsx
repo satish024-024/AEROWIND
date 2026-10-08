@@ -117,7 +117,7 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
   const [acknowledgedSoilHazard, setAcknowledgedSoilHazard] = useState<boolean>(false);
 
   // Normalized geotechnical metrics supporting flat and nested API structures
-  const bearingKpa: number | null = soilData?.measured_bearing_capacity_kpa ?? null;
+  const bearingKpa: number | null = soilData?.measured_bearing_capacity_kpa ?? soilData?.estimated_bearing_capacity_kpa ?? soilData?.geotechnical_metrics?.bearing_capacity_kpa ?? null;
   const usdaClass = soilData?.usda_texture_class ?? soilData?.soil_classification?.usda_texture_class ?? 'Clay Loam';
   const hazardLevel = soilData?.hazard_level ?? soilData?.geotechnical_metrics?.hazard_level ?? 'SAFE';
   const hazardTitle = soilData?.hazard_title ?? soilData?.geotechnical_metrics?.hazard_title ?? '';
@@ -177,6 +177,17 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
       .then(res => {
         if (!isCancelled && res) {
           setSoilData(res);
+          const bKpa = res.measured_bearing_capacity_kpa ?? res.estimated_bearing_capacity_kpa ?? res.geotechnical_metrics?.bearing_capacity_kpa ?? null;
+          const uClass = res.usda_texture_class || res.soil_classification?.usda_texture_class || 'Clay Loam';
+          const hLvl = res.hazard_level || res.geotechnical_metrics?.hazard_level || 'SAFE';
+          const fType = res.foundation_type_required || (hLvl === 'CRITICAL_BLOCKED' ? 'DEEP_PILED' : 'GRAVITY_BASE');
+          setSelectedFoundation(fType);
+          onSiteChange({
+            soil_bearing_capacity_kpa: bKpa,
+            usda_texture_class: uClass,
+            soil_hazard_level: hLvl,
+            foundation_type: fType,
+          });
         }
       })
       .catch(() => {})
@@ -1958,7 +1969,16 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
                   const r = selectedRadius || site.radiusKm || 3.0;
                   const boundary = site.boundary && site.boundary.length >= 3 ? site.boundary : generateCircleVertices(site.lat, site.lon, r);
                   const areaKm2 = site.areaKm2 || Math.round(Math.PI * r * r * 10) / 10;
-                  onConfirmSite({ ...site, radiusKm: r, areaKm2, boundary });
+                  onConfirmSite({
+                    ...site,
+                    radiusKm: r,
+                    areaKm2,
+                    boundary,
+                    soil_bearing_capacity_kpa: bearingKpa ?? site.soil_bearing_capacity_kpa,
+                    usda_texture_class: usdaClass ?? site.usda_texture_class,
+                    foundation_type: selectedFoundation ?? site.foundation_type,
+                    soil_hazard_level: hazardLevel ?? site.soil_hazard_level,
+                  });
                 }}
                 className="px-3 py-1.5 rounded-xl bg-[#FFD21F] hover:bg-[#F2C50F] text-slate-950 font-black text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
               >

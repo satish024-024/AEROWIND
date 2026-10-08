@@ -72,3 +72,18 @@ def test_sentinel_optical_evidence():
     assert "Sentinel-2" in res["satellite"]
     assert res["cloud_cover_percent"] <= 15.0
     assert res["spatial_resolution_m"] == 10.0
+
+
+def test_isric_soil_properties_and_bearing_capacity():
+    """Verify ISRIC SoilGrids v2.0 physics and geotechnical bearing capacity calculation."""
+    from backend.app.gis.soil_client import soil_client
+    res = soil_client.get_soil_properties(lat=16.792, lon=80.821)
+    assert "usda_texture_class" in res
+    assert "bulk_density_kg_dm3" in res
+    assert res["bulk_density_kg_dm3"] > 1.0
+    assert res["estimated_bearing_capacity_kpa"] is not None
+    assert res["estimated_bearing_capacity_kpa"] > 150.0  # Certified for gravity footing
+    assert res["bearing_status"] == "CERTIFIED"
+    assert res["hazard_level"] == "SAFE"
+    assert res["is_suitable_standard_foundation"] is True
+
