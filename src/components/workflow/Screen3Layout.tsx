@@ -27,6 +27,7 @@ interface Screen3LayoutProps {
   onGenerateLayout?: () => void;
   solverEngine?: OptimizationEngineType;
   onSelectSolverEngine?: (engine: OptimizationEngineType) => void;
+  onOpenQuantumCredentials?: () => void;
 }
 
 declare global {
@@ -43,6 +44,7 @@ export const Screen3Layout: React.FC<Screen3LayoutProps> = ({
   onGenerateLayout,
   solverEngine = 'aer_qaoa',
   onSelectSolverEngine,
+  onOpenQuantumCredentials,
 }) => {
   const [showWakes, setShowWakes] = useState(true);
   const [isSheetCollapsed, setIsSheetCollapsed] = useState(false);
@@ -730,19 +732,29 @@ export const Screen3Layout: React.FC<Screen3LayoutProps> = ({
               <div id="ibm-hardware-warning" className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-950 flex flex-col gap-1.5">
                 <div className="flex items-center gap-1.5 font-bold text-amber-900">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                  <span>IBM Quantum hardware unavailable</span>
+                  <span>IBM Quantum credentials required</span>
                 </div>
                 <p className="text-[10px] text-slate-600 leading-normal">
-                  No valid IBM credentials or active quantum processor detected. Select Aer Simulator to run continuous statevector QAOA.
+                  IBM Quantum credentials are required for hardware execution. Connect your personal IBM Quantum API token to submit quantum circuits.
                 </p>
-                <button
-                  id="btn-fallback-aer"
-                  type="button"
-                  onClick={() => onSelectSolverEngine?.('aer_qaoa')}
-                  className="self-start text-[10px] font-black text-amber-900 underline hover:text-amber-950"
-                >
-                  Use Aer Simulator
-                </button>
+                <div className="flex items-center gap-2 pt-0.5">
+                  <button
+                    id="btn-configure-ibm-creds"
+                    type="button"
+                    onClick={() => onOpenQuantumCredentials?.()}
+                    className="px-2.5 py-1 rounded-lg bg-amber-900 hover:bg-amber-950 text-white font-bold text-[10px] shadow-xs transition-all cursor-pointer"
+                  >
+                    Configure IBM Quantum
+                  </button>
+                  <button
+                    id="btn-fallback-aer"
+                    type="button"
+                    onClick={() => onSelectSolverEngine?.('aer_qaoa')}
+                    className="text-[10px] font-black text-amber-900 underline hover:text-amber-950 cursor-pointer"
+                  >
+                    Use Aer Simulator
+                  </button>
+                </div>
               </div>
             )}
           </div>

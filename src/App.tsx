@@ -39,6 +39,7 @@ import { Screen5Inspect } from './components/workflow/Screen5Inspect';
 import { Screen6Blueprint } from './components/workflow/Screen6Blueprint';
 import { DataSourcesModal } from './components/workflow/DataSourcesModal';
 import { AuthModal } from './components/workflow/AuthModal';
+import { QuantumCredentialsModal } from './components/workflow/QuantumCredentialsModal';
 import { InitialLayoutLoadingModal } from './components/workflow/InitialLayoutLoadingModal';
 import { BottomSheet } from './components/ui/BottomSheet';
 import { ProjectSelector } from './components/dashboard/ProjectSelector';
@@ -238,6 +239,7 @@ export function App() {
   const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
   const [isDataSourcesOpen, setIsDataSourcesOpen] = useState<boolean>(false);
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
+  const [isQuantumCredentialsModalOpen, setIsQuantumCredentialsModalOpen] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     try {
       const saved = localStorage.getItem('aqw_user');
@@ -963,7 +965,7 @@ export function App() {
             random_seed: 42,
             site_elevation_m: elevationPayload,
           };
-          optResult = await runQaoaOptimization(qaoaPayload);
+          optResult = await runQaoaOptimization(qaoaPayload, currentUser?.token);
           if (solverEngine === 'ibm_quantum') {
             const hwBackend = optResult?.hardware_execution?.backend_name || optResult?.quantum_circuit?.backend?.backend_name || 'ibm_fez';
             solverLabel = `IBM Quantum · ${hwBackend}`;
@@ -1262,6 +1264,7 @@ export function App() {
         user={currentUser}
         canGoBack={currentScreen !== 'home'}
         onBack={handleGoBack}
+        onOpenQuantumCredentials={() => setIsQuantumCredentialsModalOpen(true)}
       />
 
       {/* Main Workspace with Sidebar on Desktop */}
@@ -1367,6 +1370,7 @@ export function App() {
               onGenerateLayout={handleGenerateLayout}
               solverEngine={solverEngine}
               onSelectSolverEngine={setSolverEngine}
+              onOpenQuantumCredentials={() => setIsQuantumCredentialsModalOpen(true)}
             />
           )}
 
@@ -1464,6 +1468,17 @@ export function App() {
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
         onAuthSuccess={(user) => setCurrentUser(user as any)}
+      />
+
+      {/* IBM Quantum Per-User Credentials Modal */}
+      <QuantumCredentialsModal
+        isOpen={isQuantumCredentialsModalOpen}
+        onClose={() => setIsQuantumCredentialsModalOpen(false)}
+        authToken={currentUser?.token}
+        onOpenAuth={() => {
+          setIsQuantumCredentialsModalOpen(false);
+          setIsAuthOpen(true);
+        }}
       />
 
       {/* Global Micro-Siting Calculation Modal */}

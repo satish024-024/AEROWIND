@@ -22,8 +22,11 @@ Endpoints:
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Header, HTTPException, Query, status
 from pydantic import BaseModel, Field
+
+from backend.app.api.auth import get_current_user
+from backend.app.services.quantum_credentials import IBMQuantumCredentialService
 
 from backend.app.engineering.aep_engine import aep_calculation_engine
 from backend.app.engineering.floris_engine import TURBINE_CATALOG
@@ -388,7 +391,10 @@ async def run_classical_optimization(req: ClassicalOptimizationRequest) -> Dict[
 
 
 @router.post("/qaoa")
-async def run_qaoa_optimization(req: QaoaOptimizationRequest) -> Dict[str, Any]:
+async def run_qaoa_optimization(
+    req: QaoaOptimizationRequest,
+    authorization: Optional[str] = Header(None),
+) -> Dict[str, Any]:
     """
     Executes genuine QAOA quantum circuit optimization with AerSimulator or IBM Quantum hardware,
     followed by Top-K exact physical multi-turbine re-evaluation.
@@ -402,9 +408,40 @@ async def run_qaoa_optimization(req: QaoaOptimizationRequest) -> Dict[str, Any]:
     )
 
     # Instantiate chosen backend
+    authenticated_user_id: Optional[str] = None
     if req.backend_type.lower() == "ibm_hardware":
+        user = get_current_user(authorization)
+        user_token = None
+        user_instance = None
+        if user:
+            authenticated_user_id = user["id"]
+            user_token, user_instance = IBMQuantumCredentialService.get_decrypted_token_for_user(user["id"])
+
+        token_to_use = user_token or req.ibm_token
+        instance_to_use = user_instance
+
+        if not token_to_use:
+            return {
+                "status": "HARDWARE_UNAVAILABLE",
+                "backend": {
+                    "backend_name": req.ibm_backend_name or "ibm_quantum_hardware",
+                    "backend_type": "QUANTUM_HARDWARE",
+                    "is_hardware": True,
+                    "status": "HARDWARE_UNAVAILABLE",
+                    "error_reason": "IBM Quantum is not configured for this account. Add your IBM Quantum credentials in Quantum Settings.",
+                },
+                "error_message": "IBM Quantum is not configured for this account. Add your IBM Quantum credentials in Quantum Settings.",
+                "qubo_problem": qubo.to_dict(),
+                "declared_engineering_optimum": None,
+                "provenance": {
+                    "source_status": SourceStatus.VERIFIED_REAL.value,
+                    "engineering_suitability": EngineeringSuitability.PRELIMINARY_SCREENING_ONLY.value,
+                },
+            }
+
         backend = IBMQuantumHardwareBackend(
-            token=req.ibm_token,
+            token=token_to_use,
+            instance=instance_to_use,
             backend_name=req.ibm_backend_name,
         )
     else:
@@ -441,6 +478,9 @@ async def run_qaoa_optimization(req: QaoaOptimizationRequest) -> Dict[str, Any]:
         candidate_metadata_lookup=meta_lookup,
         site_elevation_m=effective_elevation_m,
     )
+
+    if authenticated_user_id and req.backend_type.lower() == "ibm_hardware":
+        IBMQuantumCredentialService.update_last_used(authenticated_user_id, status="SUCCESS")
 
     return result
 
@@ -481,16 +521,24 @@ async def run_qaoa_quality_audit(req: QaoaQualityAuditRequest) -> Dict[str, Any]
 
 
 @router.get("/hardware-status")
-async def get_hardware_status() -> Dict[str, Any]:
+async def get_hardware_status(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     Queries IBM Quantum hardware connection status without fabricating credentials.
+    Checks authenticated user's configured credentials if present.
     """
-    backend = IBMQuantumHardwareBackend()
+    user = get_current_user(authorization)
+    token = None
+    instance = None
+    if user:
+        token, instance = IBMQuantumCredentialService.get_decrypted_token_for_user(user["id"])
+
+    backend = IBMQuantumHardwareBackend(token=token, instance=instance)
     info = backend.get_info()
 
     return {
         "status": "AVAILABLE" if backend.is_available() else "HARDWARE_UNAVAILABLE",
         "ibm_quantum_available": backend.is_available(),
         "backend_details": info,
+        "user_credentials_configured": bool(token),
         "note": "AeroQuantum-Wind connects to genuine IBM Quantum processors via Qiskit Runtime. If credentials are unset, simulator mode remains fully functional.",
     }

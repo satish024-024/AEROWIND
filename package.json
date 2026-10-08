@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && cp -rf frontend/assets frontend/dist/",
+    "build": "tsc && vite build && node -e \"const fs=require('fs'); if(fs.existsSync('frontend/assets')) { try { fs.cpSync('frontend/assets', 'frontend/dist/assets', {recursive: true, force: false}); } catch(_) {} }\"",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
     "clsx": "^2.1.1",
     "lucide-react": "^0.475.0",
     "react": "^18.3.1",

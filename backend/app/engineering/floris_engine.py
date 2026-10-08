@@ -206,6 +206,38 @@ def interpolate_turbine_power_and_ct(
     return round(clamped_last_p, 1), round(clamped_last_ct, 3)
 
 
+def interpolate_turbine_power_and_ct_vectorized(
+    model_key: str,
+    speeds_mps: np.ndarray,
+    air_density_kgm3: float = 1.225,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Vectorized IEC 61400-12-1 power curve interpolation for an array of wind speeds.
+    Operates in O(1) vectorized NumPy operations without Python loop overhead.
+    """
+    turb = TURBINE_CATALOG.get(model_key) or TURBINE_CATALOG["ge_25_120"]
+    curves = np.array(turb["curves"], dtype=np.float64)
+    u_table = curves[:, 0]
+    p_table = curves[:, 1]
+    ct_table = curves[:, 2]
+    rated_kw = float(turb["rated_power_kw"])
+    cut_in = float(turb["cut_in_mps"])
+    cut_out = float(turb["cut_out_mps"])
+
+    density_ratio = max(0.5, min(1.5, air_density_kgm3 / 1.225))
+    u_norm = speeds_mps * (density_ratio ** (1.0 / 3.0))
+
+    p = np.interp(u_norm, u_table, p_table, left=0.0, right=p_table[-1])
+    ct = np.interp(u_norm, u_table, ct_table, left=0.05, right=ct_table[-1])
+
+    mask_inactive = (u_norm < cut_in) | (u_norm > cut_out) | (speeds_mps <= 0.0)
+    p = np.where(mask_inactive, 0.0, p)
+    ct = np.where(mask_inactive, 0.05, ct)
+
+    return np.clip(p, 0.0, rated_kw), np.clip(ct, 0.05, 0.95)
+
+
+
 # ── 2. NREL FLORIS GAUSSIAN WAKE SIMULATION ──────────────────────────────────
 
 class FlorisWakeEngine:
@@ -263,6 +295,34 @@ class FlorisWakeEngine:
         radial_factor = math.exp(-0.5 * ((crosswind_r_m / max(1.0, sigma)) ** 2))
         return float(min(0.95, max(0.0, center_deficit * radial_factor)))
 
+    def calculate_gaussian_wake_deficits_vectorized(
+        self,
+        dx_arr: np.ndarray,
+        dy_arr: np.ndarray,
+        ct_val: float,
+    ) -> np.ndarray:
+        """
+        Vectorized Bastankhah & Porté-Agel Gaussian wake deficit computation
+        for downstream slices. Avoids Python loop and scalar function overhead.
+        """
+        if len(dx_arr) == 0:
+            return np.empty(0, dtype=np.float64)
+
+        ct_clamped = min(0.95, max(0.05, ct_val))
+        sqrt_term = math.sqrt(max(1e-4, 1.0 - ct_clamped))
+        eps = 0.2 * math.sqrt((1.0 + sqrt_term) / (2.0 * max(1e-4, sqrt_term)))
+
+        sigma = self.k_star * dx_arr + eps * self.rotor_d
+        rad_denom = 8.0 * ((sigma / self.rotor_d) ** 2)
+
+        center_deficit = np.where(
+            rad_denom <= ct_clamped,
+            1.0 - sqrt_term,
+            1.0 - np.sqrt(np.maximum(1e-6, 1.0 - ct_clamped / np.maximum(1e-6, rad_denom)))
+        )
+        radial_factor = np.exp(-0.5 * ((dy_arr / np.maximum(1.0, sigma)) ** 2))
+        return np.clip(center_deficit * radial_factor, 0.0, 0.95)
+
     def simulate_farm_wake(
         self,
         positions_m: List[Tuple[float, float]],
@@ -282,55 +342,50 @@ class FlorisWakeEngine:
             return {"effective_speeds": [], "wake_deficits_pct": [], "powers_kw": [], "gross_powers_kw": [], "total_net_kw": 0.0, "total_gross_kw": 0.0, "instant_wake_loss_pct": 0.0}
 
         # Rotate coordinates into wind-aligned frame:
-        # Wind arrives from meteorological wind_from_deg.
-        # Vector points DOWNWIND towards (wind_from_deg + 180).
         downwind_azimuth = math.radians((wind_direction_deg + 180.0) % 360.0)
         u_vec = np.array([math.sin(downwind_azimuth), math.cos(downwind_azimuth)])
         v_vec = np.array([math.cos(downwind_azimuth), -math.sin(downwind_azimuth)])
 
         coords = np.array(positions_m)  # shape (N, 2)
-        # Project onto downwind (x) and crosswind (y) axes
         x_downwind = coords @ u_vec
         y_crosswind = coords @ v_vec
 
-        # Sort turbines upstream to downstream
         order = np.argsort(x_downwind)
 
-        effective_speeds = np.full(n, wind_speed_mps, dtype=float)
-        wake_deficits = np.zeros(n, dtype=float)
+        effective_speeds = np.full(n, wind_speed_mps, dtype=np.float64)
+        wake_deficits = np.zeros(n, dtype=np.float64)
 
         # Baseline single-turbine power & Ct at undisturbed freestream
-        _, free_ct = interpolate_turbine_power_and_ct(self.model_key, wind_speed_mps, air_density_kgm3=air_density_kgm3)
+        _, free_ct_arr = interpolate_turbine_power_and_ct_vectorized(self.model_key, np.array([wind_speed_mps]), air_density_kgm3=air_density_kgm3)
+        free_ct = float(free_ct_arr[0])
 
         for i_idx in range(n):
             i = order[i_idx]
             u_i = effective_speeds[i]
-            # Thrust coefficient for turbine i based on its effective inflow
-            _, ct_i = interpolate_turbine_power_and_ct(self.model_key, u_i, air_density_kgm3=air_density_kgm3)
-            ct_i = max(free_ct * 0.8, ct_i)
+            _, ct_i_arr = interpolate_turbine_power_and_ct_vectorized(self.model_key, np.array([u_i]), air_density_kgm3=air_density_kgm3)
+            ct_i = max(free_ct * 0.8, float(ct_i_arr[0]))
 
-            # Cast wake onto all downstream turbines
-            for j_idx in range(i_idx + 1, n):
-                j = order[j_idx]
-                dx = x_downwind[j] - x_downwind[i]
-                dy = abs(y_crosswind[j] - y_crosswind[i])
+            # Cast wake onto all downstream turbines using vectorized slices
+            if i_idx + 1 < n:
+                downstream_indices = order[i_idx + 1:]
+                dx = x_downwind[downstream_indices] - x_downwind[i]
+                dy = np.abs(y_crosswind[downstream_indices] - y_crosswind[i])
 
-                if dx > 5.0:  # strictly downwind
-                    deficit_ij = self.calculate_gaussian_wake_deficit(dx, dy, ct_i)
-                    # Sum-of-squares velocity deficit accumulation (Katic et al.)
-                    current_def = wake_deficits[j]
-                    combined_def = math.sqrt(current_def ** 2 + deficit_ij ** 2)
-                    wake_deficits[j] = min(0.65, combined_def)
+                valid = dx > 5.0
+                if np.any(valid):
+                    deficits_v = self.calculate_gaussian_wake_deficits_vectorized(dx[valid], dy[valid], ct_i)
+                    targets = downstream_indices[valid]
+                    wake_deficits[targets] = np.minimum(0.65, np.sqrt(wake_deficits[targets] ** 2 + deficits_v ** 2))
 
-            # Effective speed strictly clamped: cannot exceed freestream (no speed gains)
+            # Effective speed strictly clamped: cannot exceed freestream
             effective_speeds[i] = min(wind_speed_mps, max(0.0, wind_speed_mps * (1.0 - wake_deficits[i])))
 
-        # Calculate electrical power for all turbines
-        powers_kw = [interpolate_turbine_power_and_ct(self.model_key, u, air_density_kgm3=air_density_kgm3)[0] for u in effective_speeds]
-        gross_powers_kw = [interpolate_turbine_power_and_ct(self.model_key, wind_speed_mps, air_density_kgm3=air_density_kgm3)[0] for _ in range(n)]
+        # Vectorized calculation of electrical power for all turbines
+        powers_kw, _ = interpolate_turbine_power_and_ct_vectorized(self.model_key, effective_speeds, air_density_kgm3=air_density_kgm3)
+        gross_powers_kw, _ = interpolate_turbine_power_and_ct_vectorized(self.model_key, np.full(n, wind_speed_mps), air_density_kgm3=air_density_kgm3)
 
-        total_net_kw = sum(powers_kw)
-        total_gross_kw = max(1.0, sum(gross_powers_kw))
+        total_net_kw = float(np.sum(powers_kw))
+        total_gross_kw = max(1.0, float(np.sum(gross_powers_kw)))
         wake_loss_pct = round(((total_gross_kw - total_net_kw) / total_gross_kw) * 100.0, 2)
 
         return {

@@ -394,12 +394,33 @@ class CandidateGenerationEngine:
                 pass
 
         # Query real OSM infrastructure, WDPA conservation status, and land cover
-        effective_radius = self.radius_km or math.sqrt(self.area_km2 / math.pi) if self.area_km2 else 3.0
+        effective_radius = min(5.0, self.radius_km or (math.sqrt(self.area_km2 / math.pi) if self.area_km2 else 3.0))
         osm_query = overpass_client.query_physical_features(self.center_lat, self.center_lon, radius_km=effective_radius)
         osm_buildings = osm_query["features"]["buildings"]
         osm_powerlines = osm_query["features"]["powerlines"]
         osm_highways = osm_query["features"]["highways"]
         osm_waterways = osm_query["features"]["waterways"]
+
+        # Prepare spatial KD-trees for O(log M) OSM infrastructure proximity tests
+        b_tree = None
+        b_setbacks = None
+        b_types = None
+        if osm_buildings:
+            b_coords = np.array([[float(b["x_m"]), float(b["y_m"])] for b in osm_buildings], dtype=np.float64)
+            b_tree = cKDTree(b_coords)
+            b_setbacks = np.array([float(b.get("setback_m", 500.0) or 500.0) for b in osm_buildings], dtype=np.float64)
+            b_types = [b.get("type", "habitation") for b in osm_buildings]
+
+        p_tree = cKDTree(np.array([[float(p["x_m"]), float(p["y_m"])] for p in osm_powerlines], dtype=np.float64)) if osm_powerlines else None
+        h_tree = cKDTree(np.array([[float(h["x_m"]), float(h["y_m"])] for h in osm_highways], dtype=np.float64)) if osm_highways else None
+        w_tree = cKDTree(np.array([[float(w["x_m"]), float(w["y_m"])] for w in osm_waterways], dtype=np.float64)) if osm_waterways else None
+
+        # Coastal marine interface calculation: evaluate concession center once
+        try:
+            from backend.app.api.telemetry import calculate_distance_to_coast
+        except ImportError:
+            from app.api.telemetry import calculate_distance_to_coast
+        center_dist_to_coast_km = calculate_distance_to_coast(self.center_lat, self.center_lon)
 
         pa_check = protected_planet_client.check_protected_area_proximity(self.center_lat, self.center_lon)
         gwa_res = gwa_client.get_climatological_resource(self.center_lat, self.center_lon)
@@ -437,35 +458,31 @@ class CandidateGenerationEngine:
             # Geographic coordinates
             cand_lat, cand_lon = meters_to_lat_lon(x, y, self.center_lat, self.center_lon)
 
-            # Real OSM Infrastructure Distances (strictly mapped features, no synthetic buffers):
+            # Real OSM Infrastructure Distances via fast spatial indexing:
             min_building_d = 9999.0
             building_violation = False
             building_violation_msg = ""
-            for b in osm_buildings:
-                d = math.hypot(x - b["x_m"], y - b["y_m"])
-                if d < min_building_d:
-                    min_building_d = d
-                if d < nearest_overall_b_dist:
-                    nearest_overall_b_dist = d
-                    nearest_overall_b_type = b.get("type", "habitation")
-                raw_sb = b.get("setback_m")
-                # Statutory residential setback: 500m from actual mapped habitation
-                req_setback = float(raw_sb if raw_sb is not None else 500.0)
-                if d < req_setback and not building_violation:
+            if b_tree is not None:
+                min_b_d, b_idx = b_tree.query([x, y])
+                min_building_d = float(min_b_d)
+                req_setback = float(b_setbacks[b_idx])
+                if min_building_d < req_setback:
                     building_violation = True
-                    b_type = b.get("type", "residential habitation")
-                    building_violation_msg = f"Residential screening: TRIGGERED (Feature: {b_type}, Distance: {d:.0f}m < {req_setback:.0f}m)"
+                    b_type = b_types[b_idx]
+                    building_violation_msg = f"Residential screening: TRIGGERED (Feature: {b_type}, Distance: {min_building_d:.0f}m < {req_setback:.0f}m)"
+                if min_building_d < nearest_overall_b_dist:
+                    nearest_overall_b_dist = min_building_d
+                    nearest_overall_b_type = b_types[b_idx]
 
-            min_powerline_d = min([math.hypot(x - p["x_m"], y - p["y_m"]) for p in osm_powerlines], default=9999.0)
-            min_highway_d = min([math.hypot(x - h["x_m"], y - h["y_m"]) for h in osm_highways], default=9999.0)
-            min_water_d = min([math.hypot(x - w["x_m"], y - w["y_m"]) for w in osm_waterways], default=9999.0)
+            min_powerline_d = float(p_tree.query([x, y])[0]) if p_tree is not None else 9999.0
+            min_highway_d = float(h_tree.query([x, y])[0]) if h_tree is not None else 9999.0
+            min_water_d = float(w_tree.query([x, y])[0]) if w_tree is not None else 9999.0
 
             # Coastal marine interface calculation
-            try:
-                from backend.app.api.telemetry import calculate_distance_to_coast
-            except ImportError:
-                from app.api.telemetry import calculate_distance_to_coast
-            dist_to_coast_km = calculate_distance_to_coast(cand_lat, cand_lon)
+            if center_dist_to_coast_km > 5.0:
+                dist_to_coast_km = center_dist_to_coast_km
+            else:
+                dist_to_coast_km = calculate_distance_to_coast(cand_lat, cand_lon)
 
             # Comprehensive 5-Class Multi-Criteria Geographic Feasibility Mask:
             exclusion_reasons: List[str] = []

@@ -331,7 +331,11 @@ class AepCalculationEngine:
         total_weight_sum = 0.0
 
         for d_idx, (p_dir, dir_deg) in enumerate(zip(dir_probs, dir_angles)):
+            if p_dir < 1e-4:
+                continue
             for u_val, p_u in zip(u_bins, probs_u):
+                if p_u < 1e-5:
+                    continue
                 weight_h = 8760.0 * p_dir * p_u
                 total_weight_sum += weight_h
 
@@ -343,16 +347,15 @@ class AepCalculationEngine:
                     air_density_kgm3=air_density,
                 )
 
-                for t_idx in range(n_turbines):
-                    p_w = wake_res["powers_kw"][t_idx]
-                    p_g = wake_res["gross_powers_kw"][t_idx]
-                    u_eff = wake_res["effective_speeds"][t_idx]
-                    def_pct = wake_res["wake_deficits_pct"][t_idx]
+                p_w = np.array(wake_res["powers_kw"], dtype=np.float64)
+                p_g = np.array(wake_res["gross_powers_kw"], dtype=np.float64)
+                u_eff = np.array(wake_res["effective_speeds"], dtype=np.float64)
+                def_pct = np.array(wake_res["wake_deficits_pct"], dtype=np.float64)
 
-                    turbine_wake_mwh[t_idx] += (p_w / 1000.0) * weight_h
-                    turbine_gross_mwh[t_idx] += (p_g / 1000.0) * weight_h
-                    turbine_eff_speeds[t_idx] += u_eff * weight_h
-                    turbine_deficits_sum[t_idx] += def_pct * weight_h
+                turbine_wake_mwh += (p_w / 1000.0) * weight_h
+                turbine_gross_mwh += (p_g / 1000.0) * weight_h
+                turbine_eff_speeds += u_eff * weight_h
+                turbine_deficits_sum += def_pct * weight_h
 
         # Farm totals
         farm_gross_mwh = float(np.sum(turbine_gross_mwh))

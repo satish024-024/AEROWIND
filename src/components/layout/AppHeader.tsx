@@ -14,6 +14,7 @@ interface AppHeaderProps {
   user?: { username: string; email: string } | null;
   canGoBack?: boolean;
   onBack?: () => void;
+  onOpenQuantumCredentials?: () => void;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
@@ -26,6 +27,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   user,
   canGoBack = false,
   onBack,
+  onOpenQuantumCredentials,
 }) => {
   return (
     <header className="sticky top-0 z-[1300] w-full bg-white/35 hover:bg-white/45 backdrop-blur-2xl border-b border-white/35 shadow-[0_4px_24px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.7)] px-3 sm:px-4 md:px-6 py-2.5 flex items-center justify-between gap-3 sm:gap-4 transition-all">
@@ -106,11 +108,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           <MessageSquare className="w-3.5 h-3.5" />
         </button>
 
-        {/* Settings Button */}
+        {/* Quantum Settings Button */}
         <button
-          className="hidden lg:flex w-8 h-8 rounded-full bg-white/70 hover:bg-white backdrop-blur-md border border-white/80 shadow-xs items-center justify-center text-slate-700 hover:text-slate-950 active:scale-95 transition-all"
-          aria-label="Settings"
-          title="System Settings"
+          id="btn-quantum-settings"
+          type="button"
+          onClick={onOpenQuantumCredentials}
+          className="flex w-8 h-8 rounded-full bg-white/70 hover:bg-white backdrop-blur-md border border-white/80 shadow-xs items-center justify-center text-slate-700 hover:text-slate-950 active:scale-95 transition-all cursor-pointer"
+          aria-label="Quantum Settings"
+          title="IBM Quantum Credentials & Settings"
         >
           <Settings className="w-3.5 h-3.5" />
         </button>

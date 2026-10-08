@@ -144,6 +144,20 @@ def init_db() -> None:
             )
         """)
 
+        # IBM Quantum Per-User Credentials table (encrypted server-side with AES-256-GCM)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ibm_quantum_credentials (
+                id TEXT PRIMARY KEY,
+                user_id TEXT UNIQUE NOT NULL,
+                encrypted_api_token TEXT NOT NULL,
+                crn_or_instance TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used_at TIMESTAMP,
+                last_status TEXT DEFAULT 'CONFIGURED'
+            )
+        """)
+
         # Real GIS site land assessment cache
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS site_land_cache (

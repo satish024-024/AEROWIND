@@ -8,6 +8,7 @@ node_modules/
 .env
 .env.*
 .env.local
+!.env.example
 *.png
 *.db
 backend/data/*.db
