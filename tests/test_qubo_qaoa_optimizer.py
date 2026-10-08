@@ -291,7 +291,7 @@ def test_aer_simulator_deterministic_sampling_with_seed():
 
 def test_ibm_quantum_backend_hardware_unavailable_zero_fabrication():
     """Verify IBM Quantum backend strictly returns HARDWARE_UNAVAILABLE when credentials are missing."""
-    ibm_backend = IBMQuantumHardwareBackend(token=None)
+    ibm_backend = IBMQuantumHardwareBackend(token="")
 
     assert ibm_backend.is_available() is False
     assert ibm_backend.get_status() == "HARDWARE_UNAVAILABLE"

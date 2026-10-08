@@ -243,44 +243,69 @@ export function generatePolygonEnclosedTurbines(
 }
 
 /**
- * Defensive guard: ensures 100% of turbines strictly reside inside the boundary polygon
- * and outside the village residential habitation zone.
+ * Defensive guard: ensures 100% of turbines and candidate positions strictly reside
+ * inside the boundary polygon and outside the village residential habitation zone.
  */
-export function ensureTurbinesInsideBoundary(
-  turbines: Turbine[],
+export function ensureTurbinesInsideBoundary<T = Turbine>(
+  turbines: T[],
   boundary: [number, number][] | number[][] | undefined,
   centerLat?: number,
-  centerLon?: number
-): Turbine[] {
+  centerLon?: number,
+  radiusKm?: number
+): T[] {
   if (!turbines || turbines.length === 0) {
     return [];
   }
-  if (!boundary || boundary.length < 3) {
+
+  let validBoundary: [number, number][];
+  if (boundary && boundary.length >= 3) {
+    validBoundary = boundary as [number, number][];
+  } else if (centerLat !== undefined && centerLon !== undefined) {
+    validBoundary = generateGeographicCirclePolygon(centerLat, centerLon, radiusKm || 3.0, 48);
+  } else {
     return turbines;
   }
 
-  const validBoundary = boundary as [number, number][];
   const cosLat = centerLat ? Math.cos((centerLat * Math.PI) / 180) : 1.0;
 
-  return turbines.filter((t) => {
-    if (!isPointInPolygon([t.lat, t.lon], validBoundary)) return false;
+  return (turbines as any[]).filter((t) => {
+    const tLat = t.lat ?? t.latitude;
+    const tLon = t.lon ?? t.longitude;
+    if (tLat === undefined || tLon === undefined) return false;
+    if (!isPointInPolygon([tLat, tLon], validBoundary)) return false;
     // Settlement protection buffer
     if (centerLat !== undefined && centerLon !== undefined) {
-      const distToCenterM = Math.hypot((t.lat - centerLat) * 110540, (t.lon - centerLon) * 111320 * cosLat);
+      const distToCenterM = Math.hypot((tLat - centerLat) * 110540, (tLon - centerLon) * 111320 * cosLat);
       if (distToCenterM < 350.0) return false;
     }
     return true;
-  });
+  }) as T[];
 }
-function generateFallbackCircle(centerLat: number, centerLon: number, radiusKm: number): [number, number][] {
+
+/**
+ * Authoritative geodesic circular concession boundary polygon around (centerLat, centerLon).
+ * Returns an array of 48 [lat, lon] coordinates matching physical radius.
+ */
+export function generateGeographicCirclePolygon(
+  centerLat: number,
+  centerLon: number,
+  radiusKm: number,
+  steps: number = 48
+): [number, number][] {
   const pts: [number, number][] = [];
-  const cosLat = Math.cos((centerLat * Math.PI) / 180);
-  const numPts = 32;
-  for (let i = 0; i < numPts; i++) {
-    const angle = (i / numPts) * 2 * Math.PI;
-    const dLat = (radiusKm * Math.cos(angle)) / 111.0;
-    const dLon = (radiusKm * Math.sin(angle)) / (111.0 * cosLat);
-    pts.push([centerLat + dLat, centerLon + dLon]);
+  const cosLat = Math.cos((centerLat * Math.PI) / 180) || 1e-6;
+  for (let i = 0; i < steps; i++) {
+    const angle = (i / steps) * 2 * Math.PI;
+    const dLat = (radiusKm / 111.0) * Math.cos(angle);
+    const dLon = (radiusKm / (111.0 * cosLat)) * Math.sin(angle);
+    pts.push([
+      parseFloat((centerLat + dLat).toFixed(6)),
+      parseFloat((centerLon + dLon).toFixed(6)),
+    ]);
   }
   return pts;
+}
+
+function generateFallbackCircle(centerLat: number, centerLon: number, radiusKm: number): [number, number][] {
+  return generateGeographicCirclePolygon(centerLat, centerLon, radiusKm, 32);
 }

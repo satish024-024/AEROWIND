@@ -199,6 +199,7 @@ export interface LayoutAnalysisData {
   residential_screening?: string;
   main_exclusion_reason?: string;
   dominant_constraints?: string[];
+  boundary?: [number, number][] | number[][];
 }
 
 export type OptimizationEngineType = 'classical' | 'aer_qaoa' | 'ibm_quantum';

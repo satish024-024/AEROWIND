@@ -2,6 +2,36 @@
 
 ## Assigned Agent: Antigravity
 
+### Status: Completed (Concession Boundary Real-Radius Containment & Map Boundary Fix)
+- **Branch**: `feature/fix-concession-boundary-and-containment`
+- **Files Owned**:
+  - `WORKBOARD.md`
+  - `backend/app/api/layout.py`
+  - `src/types/index.ts`
+  - `src/utils/geometry.ts`
+  - `src/components/workflow/Screen3Layout.tsx`
+  - `src/components/workflow/Screen5Inspect.tsx`
+  - `src/components/workflow/Screen6Blueprint.tsx`
+  - `src/App.tsx`
+  - `tests/test_qubo_qaoa_optimizer.py`
+
+### Concession Boundary & Containment Completed Objectives:
+1. Replaced Arbitrary Hardcoded Square with True Concession Geometry:
+   - Root cause diagnosed: `Screen3Layout.tsx` and `Screen5Inspect.tsx` fell back to a hardcoded `±0.015°` square box (~1.66 km radius) when `site.boundary` had fewer than 3 points, while the engineering solver correctly micro-sited across the full circular concession radius (~2.81 km for 24.8 km²), causing candidates and placed turbines to visually spill outside the square.
+   - Replaced square with `effectiveBoundary` memo deriving authentic 48-point geodesic circle polygon `generateGeographicCirclePolygon(site.lat, site.lon, effectiveRadiusKm, 48)` from `site.radiusKm || Math.sqrt(site.areaKm2 / PI)`.
+2. 100% Boundary Containment Guarantee:
+   - Filtered candidate positions and placed turbines via `ensureTurbinesInsideBoundary` against `effectiveBoundary`.
+   - Propagated backend `boundary_vertices` via `/api/geo/initial-layout` response and stored in `layoutData.boundary` and `site.boundary`.
+3. UI Label Clarification:
+   - Renamed bottom simulation sheet toggle button on Screen 3 from ambiguous "Show Box" / "Hide Box" to clear "Show Panel" / "Hide Panel".
+4. Verification & Testing:
+   - TypeScript compilation (`npx tsc --noEmit`): clean with 0 errors.
+   - Frontend production build (`npm run build`): passed cleanly with 0 errors.
+   - Engineering test suite: 23/23 tests passed (`test_wind_wake_aep_engine.py`, `test_environmental_stack.py`).
+   - QAOA optimizer suite: 12/12 tests passed (`test_qubo_qaoa_optimizer.py`).
+   - Full 6-screen Playwright E2E test (`tests/verify_complete_flow.py`): passed all 6 workflow screens on mobile and desktop.
+   - Zero emojis verified across all code, tests, and documentation.
+
 ### Status: Completed (Micro-Siting Layout Reliability & Timeout Mitigation)
 - **Branch**: `feature/micro-siting-reliability-and-timeout-fix`
 - **Files Owned**:

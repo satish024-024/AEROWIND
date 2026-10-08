@@ -23,7 +23,7 @@ import { OptimizationData, SiteInfo, Turbine } from '../../types';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { CesiumGlobeView } from '../gis/CesiumGlobeView';
-import { ensureTurbinesInsideBoundary } from '../../utils/geometry';
+import { ensureTurbinesInsideBoundary, generateGeographicCirclePolygon } from '../../utils/geometry';
 
 interface Screen5InspectProps {
   site: SiteInfo;
@@ -79,9 +79,15 @@ export const Screen5Inspect: React.FC<Screen5InspectProps> = ({
   const rawActiveTurbines = (layoutMode === 'before' && baselineTurbines.length > 0) ? baselineTurbines : rawOptTurbines;
 
   // Guarantee 100% boundary containment
+  const effectiveRadiusKm = site.radiusKm || Math.sqrt(Math.max(1, site.areaKm2 || 24.8) / Math.PI) || 3.0;
+  const effectiveBoundary = useMemo(() => {
+    if (site.boundary && site.boundary.length >= 3) return site.boundary as [number, number][];
+    return generateGeographicCirclePolygon(site.lat, site.lon, effectiveRadiusKm, 48);
+  }, [site.boundary, site.lat, site.lon, effectiveRadiusKm]);
+
   const activeTurbines = useMemo(
-    () => ensureTurbinesInsideBoundary(rawActiveTurbines, site.boundary, site.lat, site.lon),
-    [rawActiveTurbines, site.boundary, site.lat, site.lon]
+    () => ensureTurbinesInsideBoundary(rawActiveTurbines, effectiveBoundary, site.lat, site.lon, effectiveRadiusKm),
+    [rawActiveTurbines, effectiveBoundary, site.lat, site.lon, effectiveRadiusKm]
   );
 
   const windDir = site.windDirectionDeg || 300;
@@ -163,13 +169,8 @@ export const Screen5Inspect: React.FC<Screen5InspectProps> = ({
       L.control.scale({ position: 'bottomleft', metric: true, imperial: false }).addTo(map);
       mapRef.current = map;
 
-      // Render Boundary Polygon
-      const vertices = site.boundary && site.boundary.length >= 3 ? site.boundary : [
-        [site.lat + 0.015, site.lon - 0.015],
-        [site.lat + 0.015, site.lon + 0.015],
-        [site.lat - 0.015, site.lon + 0.015],
-        [site.lat - 0.015, site.lon - 0.015],
-      ];
+      // Render Boundary Polygon (Authentic concession boundary matching physical engineering radius)
+      const vertices = effectiveBoundary;
 
       polygonLayerRef.current = L.polygon(vertices, {
         color: '#FFD21F',

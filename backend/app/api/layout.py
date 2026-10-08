@@ -92,6 +92,7 @@ class InitialLayoutResponse(BaseModel):
     dominant_constraints: Optional[List[str]] = None
     residential_screening: Optional[str] = None
     main_exclusion_reason: Optional[str] = None
+    boundary: Optional[List[List[float]]] = None
 
 
 def get_cardinal_label(deg: float) -> str:
@@ -317,6 +318,7 @@ def compute_initial_layout(req: InitialLayoutRequest) -> InitialLayoutResponse:
         dominant_constraints=pipe_stats.get("dominant_constraints"),
         residential_screening=pipe_stats.get("residential_screening", "NOT TRIGGERED"),
         main_exclusion_reason=pipe_stats.get("main_exclusion_reason"),
+        boundary=[[float(p[0]), float(p[1])] for p in pipeline_res.get("boundary_vertices", [])] if pipeline_res.get("boundary_vertices") else None,
     )
 
 

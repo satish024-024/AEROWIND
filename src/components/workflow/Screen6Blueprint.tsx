@@ -7,6 +7,7 @@ import { Card } from '../ui/Card';
 interface Screen6BlueprintProps {
   site: SiteInfo;
   optimizationData: OptimizationData | null;
+  baselineTurbines?: Turbine[];
   onBack: () => void;
   onRestart: () => void;
   onExportCSV: () => void;
@@ -17,6 +18,7 @@ interface Screen6BlueprintProps {
 export const Screen6Blueprint: React.FC<Screen6BlueprintProps> = ({
   site,
   optimizationData,
+  baselineTurbines,
   onBack,
   onRestart,
   onExportCSV,
@@ -28,7 +30,9 @@ export const Screen6Blueprint: React.FC<Screen6BlueprintProps> = ({
       ? optimizationData.optimized_turbines
       : (optimizationData?.initial_turbines && optimizationData.initial_turbines.length > 0
           ? optimizationData.initial_turbines
-          : []);
+          : (baselineTurbines && baselineTurbines.length > 0
+              ? baselineTurbines
+              : []));
 
   const turbineCount = turbines.length;
   const ratedPowerKw = optimizationData?.rated_power_kw || 2500.0;

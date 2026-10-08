@@ -42,7 +42,7 @@ import { AuthModal } from './components/workflow/AuthModal';
 import { InitialLayoutLoadingModal } from './components/workflow/InitialLayoutLoadingModal';
 import { BottomSheet } from './components/ui/BottomSheet';
 import { ProjectSelector } from './components/dashboard/ProjectSelector';
-import { ensureTurbinesInsideBoundary } from './utils/geometry';
+import { ensureTurbinesInsideBoundary, generateGeographicCirclePolygon } from './utils/geometry';
 
 // Expose APP_STATE on window for automated testing and test assertion harnesses
 declare global {
@@ -786,14 +786,22 @@ export function App() {
       const res = await generateInitialLayout(payload);
       if (res && res.turbines) {
         // Enforce 100% boundary containment
+        const effectiveRadiusKm = site.radiusKm || Math.sqrt(Math.max(1, site.areaKm2 || 24.8) / Math.PI) || 3.0;
+        const resolvedBoundary: [number, number][] = (res.boundary && res.boundary.length >= 3)
+          ? (res.boundary as [number, number][])
+          : (site.boundary && site.boundary.length >= 3)
+          ? (site.boundary as [number, number][])
+          : generateGeographicCirclePolygon(site.lat, site.lon, effectiveRadiusKm, 48);
+
         const containedTurbines = ensureTurbinesInsideBoundary(
           res.turbines,
-          site.boundary,
+          resolvedBoundary,
           site.lat,
-          site.lon
+          site.lon,
+          effectiveRadiusKm
         );
         const containedCandidates = res.candidate_positions
-          ? ensureTurbinesInsideBoundary(res.candidate_positions, site.boundary, site.lat, site.lon)
+          ? ensureTurbinesInsideBoundary(res.candidate_positions, resolvedBoundary, site.lat, site.lon, effectiveRadiusKm)
           : containedTurbines;
 
         const grossAep = res.gross_aep_gwh || (res as any).estimated_aep_gwh || Math.round(config.turbineCount * 8.5 * 10) / 10;
@@ -803,6 +811,7 @@ export function App() {
           turbines: containedTurbines,
           candidates: containedCandidates,
           candidate_positions: containedCandidates,
+          boundary: resolvedBoundary,
           gross_aep_gwh: grossAep,
           net_aep_gwh: netAep,
           wake_loss_percent: res.wake_loss_percent || 6.12,
@@ -816,6 +825,9 @@ export function App() {
           main_exclusion_reason: res.main_exclusion_reason || res.pipeline_stats?.main_exclusion_reason,
           dominant_constraints: res.dominant_constraints || res.pipeline_stats?.dominant_constraints,
         });
+
+        // Retain resolved concession boundary on site state
+        setSite(prev => ({ ...prev, boundary: resolvedBoundary }));
 
         // Update active project status and turbine count
         if (activeProject) {
@@ -974,7 +986,13 @@ export function App() {
             effective_mps: Number((layoutData.wind_speed_mps || site.windSpeedMps || 7.5).toFixed(1)),
             wake_deficit_pct: Number((winner.exact_wake_loss_pct || 2.4).toFixed(1)),
           }));
-          optTurbs = ensureTurbinesInsideBoundary(rawTurbs, site.boundary, site.lat, site.lon);
+          const effectiveRadiusKm = site.radiusKm || Math.sqrt(Math.max(1, site.areaKm2 || 24.8) / Math.PI) || 3.0;
+          const effectiveBoundary: [number, number][] = (layoutData?.boundary && layoutData.boundary.length >= 3)
+            ? (layoutData.boundary as [number, number][])
+            : (site.boundary && site.boundary.length >= 3)
+            ? (site.boundary as [number, number][])
+            : generateGeographicCirclePolygon(site.lat, site.lon, effectiveRadiusKm, 48);
+          optTurbs = ensureTurbinesInsideBoundary(rawTurbs, effectiveBoundary, site.lat, site.lon, effectiveRadiusKm);
           const rawAep = Number(winner.exact_net_aep_gwh || winner.qubo_surrogate_net_gwh || 0);
           const rawWake = Number(winner.exact_wake_loss_pct || 0);
           bestAep = rawAep > 0 ? rawAep : (layoutData.net_aep_gwh && layoutData.net_aep_gwh > 0 ? layoutData.net_aep_gwh : optTurbs.length * 8.5);
@@ -1013,11 +1031,21 @@ export function App() {
             effective_mps: t.effective_mps || site.windSpeedMps,
             wake_deficit_pct: t.wake_deficit_pct || 2.4,
           }));
-          optTurbs = ensureTurbinesInsideBoundary(rawOptTurbs, site.boundary, site.lat, site.lon);
+          const effectiveRadiusKm = site.radiusKm || Math.sqrt(Math.max(1, site.areaKm2 || 24.8) / Math.PI) || 3.0;
+          const effectiveBoundary: [number, number][] = (layoutData?.boundary && layoutData.boundary.length >= 3)
+            ? (layoutData.boundary as [number, number][])
+            : (site.boundary && site.boundary.length >= 3)
+            ? (site.boundary as [number, number][])
+            : generateGeographicCirclePolygon(site.lat, site.lon, effectiveRadiusKm, 48);
+          optTurbs = ensureTurbinesInsideBoundary(rawOptTurbs, effectiveBoundary, site.lat, site.lon, effectiveRadiusKm);
           bestAep = res.aep_gwh ? Math.round(res.aep_gwh * 10) / 10 : Math.round(layoutData.net_aep_gwh * 1.085 * 10) / 10;
           bestWakeLoss = res.wake_loss_pct ?? Math.max(3.5, Math.round(layoutData.wake_loss_percent * 0.43 * 10) / 10);
           improvementPct = res.improvement_pct || 8.5;
         }
+      }
+
+      if (optTurbs.length === 0 && layoutData.turbines && layoutData.turbines.length > 0) {
+        optTurbs = layoutData.turbines;
       }
 
       const headline = optTurbs.length > 0
@@ -1370,6 +1398,7 @@ export function App() {
             <Screen6Blueprint
               site={site}
               optimizationData={optimizationData}
+              baselineTurbines={layoutData.turbines}
               onBack={() => navigateToScreen('s5_inspect')}
               onRestart={() => navigateToScreen('s1_site')}
               onExportCSV={handleExportCSV}

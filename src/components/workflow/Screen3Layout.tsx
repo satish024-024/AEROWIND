@@ -17,7 +17,7 @@ import { LayoutAnalysisData, SiteInfo, Turbine, OptimizationEngineType } from '.
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { fetchOptimizationHardwareStatus } from '../../services/api';
-import { ensureTurbinesInsideBoundary } from '../../utils/geometry';
+import { ensureTurbinesInsideBoundary, generateGeographicCirclePolygon } from '../../utils/geometry';
 
 interface Screen3LayoutProps {
   site: SiteInfo;
@@ -84,11 +84,23 @@ export const Screen3Layout: React.FC<Screen3LayoutProps> = ({
   const isSiteUnsuitable = Boolean(layoutData.site_unsuitable);
   const isLayoutPending = !layoutData.site_unsuitable && (!layoutData.turbines || layoutData.turbines.length === 0);
   const baseTurbines = (layoutData.turbines && layoutData.turbines.length > 0) ? layoutData.turbines : [];
+  
+  const effectiveRadiusKm = site.radiusKm || Math.sqrt(Math.max(1, site.areaKm2 || 24.8) / Math.PI) || 3.0;
+  const effectiveBoundary = useMemo(() => {
+    if (site.boundary && site.boundary.length >= 3) return site.boundary as [number, number][];
+    if (layoutData?.boundary && layoutData.boundary.length >= 3) return layoutData.boundary as [number, number][];
+    return generateGeographicCirclePolygon(site.lat, site.lon, effectiveRadiusKm, 48);
+  }, [site.boundary, layoutData?.boundary, site.lat, site.lon, effectiveRadiusKm]);
+
   const turbines = useMemo(
-    () => ensureTurbinesInsideBoundary(baseTurbines, site.boundary, site.lat, site.lon),
-    [baseTurbines, site.boundary, site.lat, site.lon]
+    () => ensureTurbinesInsideBoundary(baseTurbines, effectiveBoundary, site.lat, site.lon, effectiveRadiusKm),
+    [baseTurbines, effectiveBoundary, site.lat, site.lon, effectiveRadiusKm]
   );
-  const candidates = layoutData.candidate_positions || layoutData.candidates || [];
+  const rawCandidates = layoutData.candidate_positions || layoutData.candidates || [];
+  const candidates = useMemo(
+    () => ensureTurbinesInsideBoundary(rawCandidates as any[], effectiveBoundary, site.lat, site.lon, effectiveRadiusKm),
+    [rawCandidates, effectiveBoundary, site.lat, site.lon, effectiveRadiusKm]
+  );
   const windDir = layoutData.wind_direction_deg ?? 300;
   const windSpeed = (layoutData.wind_speed_mps || site.windSpeedMps || 7.1).toFixed(1);
 
@@ -158,13 +170,8 @@ export const Screen3Layout: React.FC<Screen3LayoutProps> = ({
       L.control.scale({ position: 'bottomleft', metric: true, imperial: false }).addTo(map);
       mapRef.current = map;
 
-      // Render Boundary Polygon
-      const vertices = site.boundary && site.boundary.length >= 3 ? site.boundary : [
-        [site.lat + 0.015, site.lon - 0.015],
-        [site.lat + 0.015, site.lon + 0.015],
-        [site.lat - 0.015, site.lon + 0.015],
-        [site.lat - 0.015, site.lon - 0.015],
-      ];
+      // Render Boundary Polygon (Authentic concession boundary matching physical engineering radius)
+      const vertices = effectiveBoundary;
 
       polygonLayerRef.current = L.polygon(vertices, {
         color: '#FFD21F',
@@ -416,10 +423,10 @@ export const Screen3Layout: React.FC<Screen3LayoutProps> = ({
                 ? 'bg-[#FFD21F] text-slate-950 border-[#FFD21F]'
                 : 'bg-white/90 text-slate-700 border-white/80 hover:bg-white'
             }`}
-            title={isSheetCollapsed ? "Show Telemetry Box" : "Hide Telemetry Box"}
+            title={isSheetCollapsed ? "Show Simulation Panel" : "Hide Simulation Panel"}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>{isSheetCollapsed ? 'Show Box' : 'Hide Box'}</span>
+            <span>{isSheetCollapsed ? 'Show Panel' : 'Hide Panel'}</span>
           </button>
 
           <button
