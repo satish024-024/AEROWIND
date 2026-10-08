@@ -109,7 +109,7 @@ def fetch_real_100m_wind_telemetry(lat: float, lon: float) -> Dict[str, Any]:
             url,
             headers={"User-Agent": "AeroQuantumWind/2.4 (clean-energy-gis-engine; contact@aeroquantum.org)"},
         )
-        with urllib.request.urlopen(req, timeout=5.0) as resp:
+        with urllib.request.urlopen(req, timeout=2.5) as resp:
             data = json.loads(resp.read().decode())
             current = data.get("current", {})
             hourly = data.get("hourly", {})

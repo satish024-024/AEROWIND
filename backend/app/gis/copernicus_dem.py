@@ -46,7 +46,7 @@ init_dem_table()
 class CopernicusDemClient:
     """Production client for Copernicus DEM GLO-30m data."""
 
-    def __init__(self, timeout_sec: float = 2.5):
+    def __init__(self, timeout_sec: float = 2.0):
         self.timeout_sec = timeout_sec
 
     def fetch_elevations(self, coords: List[Tuple[float, float]]) -> List[Optional[float]]:
@@ -90,9 +90,9 @@ class CopernicusDemClient:
 
         # 3. Query Open-Meteo elevation API (backed by Copernicus DEM 30m / SRTM)
         if still_missing:
-            # Batch in chunks of 50
+            # Batch in chunks of 50 (at most 1 network batch to prevent request stalling)
             batch_size = 50
-            for i in range(0, len(still_missing), batch_size):
+            for i in range(0, min(len(still_missing), 50), batch_size):
                 batch = still_missing[i : i + batch_size]
                 lats_str = ",".join(f"{p[1]:.6f}" for p in batch)
                 lons_str = ",".join(f"{p[2]:.6f}" for p in batch)

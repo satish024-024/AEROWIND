@@ -246,7 +246,7 @@ async def compute_feasibility_mask(req: FeasibilityRequest):
 async def get_site_land_data(
     lat: float = Query(..., ge=-90.0, le=90.0),
     lon: float = Query(..., ge=-180.0, le=180.0),
-    radius_km: float = Query(3.0, ge=0.5, le=50.0),
+    radius_km: float = Query(3.0, ge=0.1, le=50.0),
 ):
     try:
         from backend.app.gis_service import (

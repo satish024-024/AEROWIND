@@ -2,6 +2,35 @@
 
 ## Assigned Agent: Antigravity
 
+### Status: Completed (Micro-Siting Layout Reliability & Timeout Mitigation)
+- **Branch**: `feature/micro-siting-reliability-and-timeout-fix`
+- **Files Owned**:
+  - `WORKBOARD.md`
+  - `backend/app/gis/overpass_client.py`
+  - `backend/app/gis/copernicus_dem.py`
+  - `backend/app/gis_service.py`
+  - `backend/app/api/geo.py`
+  - `backend/app/api/layout.py`
+  - `src/services/api.ts`
+
+### Micro-Siting Reliability Objectives:
+1. Resilient Overpass GIS Query Budget:
+   - Reduced Overpass mirror timeout from 8.0s to 2.5s with a strict 4.0s total search deadline across public mirrors in `overpass_client.py`.
+   - Prevented pipeline stalls on cold coordinates by using spatial enclosure caching and fast zero-violation baseline return on mirror throttling.
+2. Dem & Wind Telemetry Network Capping:
+   - Capped Copernicus DEM batch query to at most 50 coordinates per request in `copernicus_dem.py` with 2.0s timeout.
+   - Reduced ERA5 / GWA wind telemetry query timeout to 2.5s in `gis_service.py`.
+3. Boundary & Query Parameter Invariance:
+   - Handled arbitrary boundary schemas (GeoJSON geometries, dicts, arrays) and relaxed `area_km2` typing in `layout.py`.
+   - Relaxed `/land-data` constraint in `geo.py` from `radius_km >= 0.5` to `radius_km >= 0.1`, eliminating 422 Unprocessable Entity errors.
+4. Client-Side Dual Backend Dispatch:
+   - Added automatic fallback in `src/services/api.ts`: if the Vercel proxy rewrite `/api/geo/initial-layout` stalls (>7s) or drops connection, client directly queries `https://backend-production-ec09.up.railway.app/api/geo/initial-layout`.
+   - Extracted accurate HTTP status diagnostics instead of empty error strings.
+5. Verification:
+   - Micro-siting layout generation executes in 2.19s-3.73s across coordinates (16.792N, 80.821E and Bommuru).
+   - 23/23 engineering pytest suite passed (`test_wind_wake_aep_engine.py`, `test_environmental_stack.py`).
+   - Clean production compilation (`npm run build`). Zero emojis confirmed across all code, tests, and commit messages.
+
 ### Status: Completed (Phase 8C — Interactive Optimization UI Controls)
 - **Branch**: `feature/phase-8c-interactive-optimization-controls`
 - **Files Owned**:

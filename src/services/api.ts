@@ -504,17 +504,59 @@ export async function fetchVillageBoundary(query: string, lat?: number, lon?: nu
 }
 
 export async function generateInitialLayout(payload: any): Promise<any> {
-  const res = await fetch(`${API_BASE}/geo/initial-layout`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    let detail = res.statusText;
+  const RAILWAY_URL = 'https://backend-production-ec09.up.railway.app/api/geo/initial-layout';
+  let res: Response | null = null;
+  let fetchError: any = null;
+
+  // 1. Try standard API_BASE route with 7-second timeout
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 7000);
+    res = await fetch(`${API_BASE}/geo/initial-layout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+  } catch (err) {
+    fetchError = err;
+    console.warn('Initial layout fetch via proxy failed/timed out, attempting direct backend:', err);
+  }
+
+  // 2. Fall back directly to Railway if proxy failed or returned gateway error (502/504)
+  if (!res || !res.ok) {
     try {
-      const err = await res.json();
-      if (err?.detail) detail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
-    } catch (_) {}
+      const directController = new AbortController();
+      const directTimer = setTimeout(() => directController.abort(), 12000);
+      const directRes = await fetch(RAILWAY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: directController.signal,
+      });
+      clearTimeout(directTimer);
+      if (directRes.ok) {
+        return await directRes.json();
+      }
+      res = directRes;
+    } catch (directErr) {
+      console.warn('Direct Railway initial layout fetch encountered error:', directErr);
+    }
+  }
+
+  if (!res || !res.ok) {
+    let detail = '';
+    if (res) {
+      try {
+        const err = await res.json();
+        if (err?.detail) detail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+      } catch (_) {
+        detail = res.statusText || `HTTP ${res.status}`;
+      }
+    } else if (fetchError) {
+      detail = fetchError.name === 'AbortError' ? 'Network gateway timeout (exceeded 7s)' : fetchError.message;
+    }
     throw new Error(detail ? `Initial layout failed: ${detail}` : 'Initial layout failed: Backend engineering service encountered an error.');
   }
   return res.json();

@@ -27,9 +27,9 @@ router = APIRouter(prefix="", tags=["layout"])
 class InitialLayoutRequest(BaseModel):
     center_lat: float = Field(..., description="Site center latitude")
     center_lon: float = Field(..., description="Site center longitude")
-    boundary: Optional[List[List[float]]] = Field(default=None, description="Site boundary polygon [[lat, lon], ...]")
+    boundary: Optional[Any] = Field(default=None, description="Site boundary polygon [[lat, lon], ...] or GeoJSON geometry")
     exclusions: Optional[List[Dict[str, Any]]] = Field(default=None, description="Environmental / legal exclusion zones")
-    area_km2: float = Field(default=11.0, description="Site boundary area in km2")
+    area_km2: Optional[float] = Field(default=11.0, description="Site boundary area in km2")
     turbine_count: int = Field(default=10, ge=1, le=100, description="Number of turbines")
     rotor_diameter: float = Field(default=120.0, ge=40.0, le=250.0, description="Rotor diameter in meters")
     hub_height: float = Field(default=110.0, ge=40.0, le=250.0, description="Hub height in meters")
@@ -112,11 +112,27 @@ def compute_initial_layout(req: InitialLayoutRequest) -> InitialLayoutResponse:
     except ImportError:
         from app.geo_engine import CandidateGenerationEngine, HybridWindFarmOptimizer
 
+    raw_boundary = req.boundary
+    parsed_boundary = None
+    if isinstance(raw_boundary, dict):
+        if "coordinates" in raw_boundary:
+            c = raw_boundary["coordinates"]
+            if c and isinstance(c, list) and len(c) > 0 and isinstance(c[0], list) and len(c[0]) > 0 and isinstance(c[0][0], list):
+                parsed_boundary = c[0]
+            else:
+                parsed_boundary = c
+        elif "boundary" in raw_boundary:
+            parsed_boundary = raw_boundary["boundary"]
+    elif isinstance(raw_boundary, list):
+        parsed_boundary = raw_boundary
+
+    effective_area_km2 = float(req.area_km2) if (req.area_km2 and req.area_km2 > 0) else 11.0
+
     engine = CandidateGenerationEngine(
         center_lat=req.center_lat,
         center_lon=req.center_lon,
-        boundary=req.boundary,
-        area_km2=req.area_km2,
+        boundary=parsed_boundary,
+        area_km2=effective_area_km2,
         rotor_diameter=req.rotor_diameter,
         hub_height=req.hub_height,
         spacing_multiplier_d=req.spacing_multiplier_d,
@@ -128,7 +144,7 @@ def compute_initial_layout(req: InitialLayoutRequest) -> InitialLayoutResponse:
     candidates = pipeline_res["candidates"]
 
     # Phase 4: Supplement via CandidateEngine if initial pipeline needs candidates
-    if len(candidates) < req.turbine_count and req.boundary and len(req.boundary) >= 3:
+    if len(candidates) < req.turbine_count and parsed_boundary and len(parsed_boundary) >= 3:
         try:
             from backend.app.engineering.candidate_engine import candidate_engine
             ring = []

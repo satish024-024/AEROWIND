@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
@@ -54,7 +55,7 @@ class OverpassClient:
         "https://z.overpass-api.de/api/interpreter",
     ]
 
-    def __init__(self, timeout_sec: float = 8.0):
+    def __init__(self, timeout_sec: float = 2.5):
         self.timeout_sec = timeout_sec
 
     def _get_cache_key(self, lat: float, lon: float, radius_km: float) -> str:
@@ -137,7 +138,10 @@ class OverpassClient:
         data_source = "OpenStreetMap / Overpass API (Live Real Infrastructure)"
         query_success = False
 
+        t_start = time.time()
         for endpoint in self.OVERPASS_MIRRORS:
+            if time.time() - t_start > 4.0:
+                break
             try:
                 req_data = urllib.parse.urlencode({"data": overpass_ql}).encode("utf-8")
                 req = urllib.request.Request(
