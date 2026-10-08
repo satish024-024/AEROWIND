@@ -533,8 +533,8 @@ async def get_map_tile(layer: str, z: int, x: int, y: int) -> Response:
         ]
     elif layer == "terrain":
         urls_to_try = [
+            f"https://mt{sub}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}",
             f"https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-            f"https://tile.opentopomap.org/{z}/{x}/{y}.png",
         ]
     elif layer == "labels":
         urls_to_try = [
