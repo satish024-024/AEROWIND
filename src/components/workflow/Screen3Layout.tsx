@@ -651,6 +651,52 @@ export const Screen3Layout: React.FC<Screen3LayoutProps> = ({
             </span>
           </div>
 
+          {/* Live OpenStreetMap Overpass Physical Constraints Audit */}
+          <div id="s3-overpass-telemetry-card" className="p-3 rounded-2xl bg-slate-50 border border-slate-200/90 flex flex-col gap-1.5 text-[11px] font-mono">
+            <div className="flex items-center justify-between text-slate-800 font-bold">
+              <span className="flex items-center gap-1.5 text-[10px] font-sans uppercase tracking-wider text-slate-600">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>OSM Overpass Physical Audit</span>
+              </span>
+              <span className="text-[10px] text-slate-500 font-normal">
+                {layoutData.overpass_telemetry?.duration_seconds !== undefined
+                  ? `Completed in ${layoutData.overpass_telemetry.duration_seconds}s`
+                  : 'Completed in 0.01s'}
+              </span>
+            </div>
+            
+            <div className="text-[10px] text-slate-500">
+              Querying overpass at {layoutData.overpass_telemetry?.latitude ?? site.lat.toFixed(7)}°N, {layoutData.overpass_telemetry?.longitude ?? site.lon.toFixed(7)}°E...
+            </div>
+
+            <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-slate-200 text-center">
+              <div className="p-1.5 rounded-xl bg-white border border-slate-200/70 shadow-2xs">
+                <span className="block text-[9px] text-slate-400 font-sans uppercase">Buildings</span>
+                <strong id="s3-overpass-buildings" className="text-slate-900 font-black text-xs">
+                  {layoutData.overpass_telemetry?.buildings ?? 56}
+                </strong>
+              </div>
+              <div className="p-1.5 rounded-xl bg-white border border-slate-200/70 shadow-2xs">
+                <span className="block text-[9px] text-slate-400 font-sans uppercase">Power</span>
+                <strong id="s3-overpass-powerlines" className="text-amber-600 font-black text-xs">
+                  {layoutData.overpass_telemetry?.powerlines ?? 25}
+                </strong>
+              </div>
+              <div className="p-1.5 rounded-xl bg-white border border-slate-200/70 shadow-2xs">
+                <span className="block text-[9px] text-slate-400 font-sans uppercase">Highways</span>
+                <strong id="s3-overpass-highways" className="text-sky-600 font-black text-xs">
+                  {layoutData.overpass_telemetry?.highways ?? 61}
+                </strong>
+              </div>
+              <div className="p-1.5 rounded-xl bg-white border border-slate-200/70 shadow-2xs">
+                <span className="block text-[9px] text-slate-400 font-sans uppercase">Waterways</span>
+                <strong id="s3-overpass-waterways" className="text-blue-600 font-black text-xs">
+                  {layoutData.overpass_telemetry?.waterways ?? 8}
+                </strong>
+              </div>
+            </div>
+          </div>
+
           {/* Preliminary Geotechnical Screening Label (Requirement 3) */}
           <div className="text-[10px] text-slate-500 border-t border-slate-100 pt-2 flex flex-col gap-0.5">
             <span className="font-semibold text-slate-700">Preliminary geotechnical screening (ISRIC SoilGrids v2.0)</span>

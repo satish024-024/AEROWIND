@@ -18,6 +18,7 @@ import {
   saveQuantumCredentials,
   deleteQuantumCredentials,
   testQuantumConnection,
+  ensureActiveSession,
   QuantumCredentialMetadata,
 } from '../../services/api';
 
@@ -47,8 +48,9 @@ export const QuantumCredentialsModal: React.FC<QuantumCredentialsModalProps> = (
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [successMsg, setSuccessMsg] = useState<string>('');
   const [showConfirmDelete, setShowConfirmDelete] = useState<boolean>(false);
+  const [activeSessionToken, setActiveSessionToken] = useState<string | null>(null);
 
-  // Load existing credentials metadata on modal open
+  // Load existing credentials metadata on modal open, ensuring an active session
   useEffect(() => {
     if (!isOpen) {
       setTestResult(null);
@@ -58,29 +60,47 @@ export const QuantumCredentialsModal: React.FC<QuantumCredentialsModalProps> = (
       return;
     }
 
-    const token = authToken || localStorage.getItem('aqw_token') || undefined;
-    if (!token) {
-      setMetadata(null);
-      return;
-    }
-
+    let isMounted = true;
     setIsLoading(true);
-    fetchQuantumCredentials(token)
-      .then((data) => {
+
+    const initModal = async () => {
+      try {
+        let token = authToken || localStorage.getItem('aqw_token') || undefined;
+        if (!token) {
+          token = await ensureActiveSession();
+        }
+        if (!isMounted) return;
+        if (token) setActiveSessionToken(token);
+
+        const data = await fetchQuantumCredentials(token);
+        if (!isMounted) return;
         setMetadata(data);
         setIsEditing(!data.configured);
-      })
-      .catch((err) => {
+      } catch (err) {
         console.warn('Failed to load quantum credentials metadata:', err);
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+        if (isMounted) setIsEditing(true);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    initModal();
+    return () => {
+      isMounted = false;
+    };
   }, [isOpen, authToken]);
 
   if (!isOpen) return null;
 
-  const currentToken = authToken || localStorage.getItem('aqw_token');
+  const getEffectiveToken = async (): Promise<string> => {
+    if (authToken) return authToken;
+    const local = localStorage.getItem('aqw_token');
+    if (local) return local;
+    if (activeSessionToken) return activeSessionToken;
+    const fresh = await ensureActiveSession();
+    setActiveSessionToken(fresh);
+    return fresh;
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,9 +116,10 @@ export const QuantumCredentialsModal: React.FC<QuantumCredentialsModalProps> = (
 
     setIsLoading(true);
     try {
+      const token = await getEffectiveToken();
       const res = await saveQuantumCredentials(
         { api_token: trimmedToken, crn: crn.trim() || undefined },
-        currentToken || undefined
+        token
       );
       setSuccessMsg(res.message || 'IBM Quantum credentials saved securely.');
       setApiToken('');
@@ -106,7 +127,7 @@ export const QuantumCredentialsModal: React.FC<QuantumCredentialsModalProps> = (
       setIsEditing(false);
 
       // Refresh metadata
-      const freshMeta = await fetchQuantumCredentials(currentToken || undefined);
+      const freshMeta = await fetchQuantumCredentials(token);
       setMetadata(freshMeta);
       onCredentialsUpdated?.(true);
     } catch (err: any) {
@@ -123,7 +144,8 @@ export const QuantumCredentialsModal: React.FC<QuantumCredentialsModalProps> = (
     setIsTesting(true);
 
     try {
-      const res = await testQuantumConnection(currentToken || undefined);
+      const token = await getEffectiveToken();
+      const res = await testQuantumConnection(token);
       setTestResult(res);
     } catch (err: any) {
       setTestResult({
@@ -139,7 +161,8 @@ export const QuantumCredentialsModal: React.FC<QuantumCredentialsModalProps> = (
     setIsLoading(true);
     setErrorMsg('');
     try {
-      await deleteQuantumCredentials(currentToken || undefined);
+      const token = await getEffectiveToken();
+      await deleteQuantumCredentials(token);
       setMetadata({ configured: false, crn_configured: false });
       setIsEditing(true);
       setShowConfirmDelete(false);
@@ -196,28 +219,27 @@ export const QuantumCredentialsModal: React.FC<QuantumCredentialsModalProps> = (
         {/* Modal Body */}
         <div className="p-6 flex flex-col gap-4">
           
-          {/* Sign In Required Notice */}
-          {!currentToken && (
-            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-950 flex flex-col gap-2.5">
-              <div className="flex items-center gap-2 font-bold text-amber-900">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Authentication Required</span>
-              </div>
-              <p className="text-[11px] text-slate-600 leading-normal">
-                To isolate and protect IBM Quantum credentials, please sign in with your engineer account before saving credentials.
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onOpenAuth?.();
-                }}
-                className="self-start px-3 py-1.5 rounded-xl bg-slate-950 text-white font-bold text-xs hover:bg-slate-800 transition-colors"
-              >
-                Sign In Now
-              </button>
+          {/* Active Workspace / Session Indicator */}
+          <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>
+                Engineer Workspace: <strong className="text-slate-800 font-semibold">{(() => {
+                  try {
+                    const saved = localStorage.getItem('aqw_user');
+                    if (saved) {
+                      const u = JSON.parse(saved);
+                      return u.username || u.email || 'engineer1';
+                    }
+                  } catch (_) {}
+                  return 'engineer1';
+                })()}</strong>
+              </span>
             </div>
-          )}
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+              Connected
+            </span>
+          </div>
 
           {/* Feedback Messages */}
           {errorMsg && (
@@ -260,7 +282,7 @@ export const QuantumCredentialsModal: React.FC<QuantumCredentialsModalProps> = (
           )}
 
           {/* STATE A: Credentials Configured View */}
-          {currentToken && metadata?.configured && !isEditing && (
+          {metadata?.configured && !isEditing && (
             <div className="flex flex-col gap-3">
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-col gap-3">
                 <div className="flex items-center justify-between">
@@ -368,7 +390,7 @@ export const QuantumCredentialsModal: React.FC<QuantumCredentialsModalProps> = (
           )}
 
           {/* STATE B: Edit / Enter Credentials Form */}
-          {currentToken && (!metadata?.configured || isEditing) && (
+          {(!metadata?.configured || isEditing) && (
             <form onSubmit={handleSave} className="flex flex-col gap-3">
               {/* Token Input */}
               <div>

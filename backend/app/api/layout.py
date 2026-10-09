@@ -89,6 +89,7 @@ class InitialLayoutResponse(BaseModel):
     conflicts_count: Optional[int] = None
     site_unsuitable: Optional[bool] = None
     pipeline_stats: Optional[Dict[str, Any]] = None
+    overpass_telemetry: Optional[Dict[str, Any]] = None
     dominant_constraints: Optional[List[str]] = None
     residential_screening: Optional[str] = None
     main_exclusion_reason: Optional[str] = None
@@ -315,6 +316,7 @@ def compute_initial_layout(req: InitialLayoutRequest) -> InitialLayoutResponse:
         conflicts_count=len(wake_conflicts),
         site_unsuitable=len(turbines) == 0,
         pipeline_stats=pipe_stats,
+        overpass_telemetry=pipe_stats.get("overpass_telemetry"),
         dominant_constraints=pipe_stats.get("dominant_constraints"),
         residential_screening=pipe_stats.get("residential_screening", "NOT TRIGGERED"),
         main_exclusion_reason=pipe_stats.get("main_exclusion_reason"),
