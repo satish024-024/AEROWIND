@@ -2,8 +2,37 @@
 
 ## Assigned Agent: Antigravity
 
-### Status: Completed (Concession Boundary Real-Radius Containment & Map Boundary Fix)
-- **Branch**: `feature/fix-concession-boundary-and-containment`
+### Status: Completed (Per-User IBM Quantum Credentials Authentication Flow & Auto-Session Provisioning)
+- **Branch**: `feature/fix-quantum-credentials-auth-flow` -> `main`
+- **Files Owned**:
+  - `WORKBOARD.md`
+  - `backend/app/api/auth.py`
+  - `backend/app/api/quantum_credentials.py`
+  - `backend/app/db.py`
+  - `src/services/api.ts`
+  - `src/components/workflow/QuantumCredentialsModal.tsx`
+  - `src/App.tsx`
+  - `tests/test_per_user_ibm_credentials.py`
+
+### Quantum Credentials Flow Objectives & Results:
+1. Root Cause Diagnosed:
+   - When visitors or evaluators opened the IBM Quantum Credentials modal without prior manual account registration, `currentUser` and `aqw_token` were unset.
+   - The modal rendered a blocking "Authentication Required" barrier notice that concealed the credential form and prevented token entry, or threw 401 Unauthorized if submitted.
+2. Auto-Provisioning & Resilient Session Management:
+   - Added `POST /api/auth/guest` endpoint in `backend/app/api/auth.py` returning immediate session tokens without requiring registration.
+   - Guaranteed default engineer account (`engineer1`) seeding on database boot in `backend/app/db.py`.
+   - Introduced `ensureActiveSession()` helper in `src/services/api.ts` to transparently acquire and persist active session tokens for guest and demo engineering workflows.
+3. Unblocked Modal Form UX:
+   - Removed blocking "Authentication Required" card in `QuantumCredentialsModal.tsx`.
+   - Directly exposed `input-ibm-token`, `input-ibm-crn`, and `btn-save-quantum-credentials` so users can immediately paste their IBM Quantum API key and save credentials.
+   - Added clear "Engineer Workspace: Connected" session indicator badge.
+   - Synchronized hardware availability check in `App.tsx` upon saving credentials.
+4. Test Verification:
+   - Full backend test suite passed: 24/24 tests (`tests/test_per_user_ibm_credentials.py`, `tests/test_api.py`).
+   - Playwright end-to-end UI verification passed at mobile 390px and desktop 1280px (`scripts/verify_quantum_modal.py`).
+   - Frontend production build (`npm run build`) compiled cleanly with zero errors.
+   - Changes merged cleanly into `main` and pushed to remote repository.
+   - Strict zero emojis policy maintained across all code, tests, and documentation.
 - **Files Owned**:
   - `WORKBOARD.md`
   - `backend/app/api/layout.py`
