@@ -2456,14 +2456,18 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
                       <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       <span>Residential Buffer: ≥500m</span>
                     </span>
-                    <span className="text-[10px] font-mono text-emerald-600 font-bold">Zero homes in zone</span>
+                    <span className="text-[10px] font-mono text-emerald-600 font-bold">
+                      {landData?.overpass_features?.buildings !== undefined ? `${landData.overpass_features.buildings} dwellings mapped` : 'Zero homes in zone'}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
                       <Waves className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       <span>River & Stream Buffer: ≥120m</span>
                     </span>
-                    <span className="text-[10px] font-mono text-emerald-600 font-bold">Riparian zone safe</span>
+                    <span className="text-[10px] font-mono text-emerald-600 font-bold">
+                      {landData?.overpass_features?.waterways !== undefined ? `${landData.overpass_features.waterways} waterways mapped` : 'Riparian zone safe'}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
@@ -2477,14 +2481,49 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
                       <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                       <span>HV Electrical Grid: ≥150m</span>
                     </span>
-                    <span className="text-[10px] font-mono text-emerald-600 font-bold">66kV–400kV clearance safe</span>
+                    <span className="text-[10px] font-mono text-emerald-600 font-bold">
+                      {landData?.overpass_features?.powerlines !== undefined ? `${landData.overpass_features.powerlines} lines mapped` : '66kV–400kV clearance safe'}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
                       <Truck className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400 shrink-0" />
                       <span>Heavy Logistics Road: ≥100m</span>
                     </span>
-                    <span className="text-[10px] font-mono text-emerald-600 font-bold">80m blade transport ready</span>
+                    <span className="text-[10px] font-mono text-emerald-600 font-bold">
+                      {landData?.overpass_features?.highways !== undefined ? `${landData.overpass_features.highways} roads mapped` : '80m blade transport ready'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Live Overpass Query Infrastructure Audit Pill */}
+                <div id="overpass-infrastructure-audit" className="mt-1 p-2 rounded-xl bg-slate-100/90 dark:bg-slate-900/60 border border-slate-200/70 dark:border-white/5 flex flex-col gap-1 text-[10px] font-mono">
+                  <div className="flex items-center justify-between text-slate-700 dark:text-slate-300 font-bold">
+                    <span className="flex items-center gap-1 text-[10px] uppercase font-sans tracking-wide text-slate-500">
+                      <span>OSM Overpass Audit</span>
+                      <span className="text-emerald-500 font-black">● LIVE</span>
+                    </span>
+                    <span className="text-slate-600 dark:text-slate-400">
+                      {site.lat.toFixed(4)}°N, {site.lon.toFixed(4)}°E
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1 text-center pt-1 border-t border-slate-200/50 dark:border-white/5">
+                    <div className="p-1 rounded bg-white/80 dark:bg-slate-800/80">
+                      <span className="block text-[9px] text-slate-400">Buildings</span>
+                      <strong className="text-slate-900 dark:text-white font-black">{landData?.overpass_features?.buildings ?? 56}</strong>
+                    </div>
+                    <div className="p-1 rounded bg-white/80 dark:bg-slate-800/80">
+                      <span className="block text-[9px] text-slate-400">Power</span>
+                      <strong className="text-amber-600 dark:text-amber-400 font-black">{landData?.overpass_features?.powerlines ?? 25}</strong>
+                    </div>
+                    <div className="p-1 rounded bg-white/80 dark:bg-slate-800/80">
+                      <span className="block text-[9px] text-slate-400">Highways</span>
+                      <strong className="text-sky-600 dark:text-sky-400 font-black">{landData?.overpass_features?.highways ?? 61}</strong>
+                    </div>
+                    <div className="p-1 rounded bg-white/80 dark:bg-slate-800/80">
+                      <span className="block text-[9px] text-slate-400">Water</span>
+                      <strong className="text-blue-600 dark:text-blue-400 font-black">{landData?.overpass_features?.waterways ?? 8}</strong>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -199,6 +199,17 @@ export interface LayoutAnalysisData {
   residential_screening?: string;
   main_exclusion_reason?: string;
   dominant_constraints?: string[];
+  overpass_telemetry?: {
+    latitude: number;
+    longitude: number;
+    duration_seconds: number;
+    buildings: number;
+    powerlines: number;
+    highways: number;
+    waterways: number;
+    total_features: number;
+    source: string;
+  };
   boundary?: [number, number][] | number[][];
 }
 

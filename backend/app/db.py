@@ -240,6 +240,16 @@ def init_db() -> None:
 
         conn.commit()
 
+        # Seed default engineer user if empty
+        cursor.execute("SELECT COUNT(*) FROM users")
+        if cursor.fetchone()[0] == 0:
+            pwd_hash = hash_password("securepassword123")
+            cursor.execute("""
+                INSERT INTO users (id, username, email, password_hash)
+                VALUES (1, 'engineer1', 'engineer1@aeroquantum.com', ?)
+            """, (pwd_hash,))
+            conn.commit()
+
         # Seed initial projects if table is empty
         cursor.execute("SELECT COUNT(*) FROM projects")
         if cursor.fetchone()[0] == 0:

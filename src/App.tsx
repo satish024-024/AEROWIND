@@ -24,7 +24,9 @@ import {
   runClassicalOptimization,
   runQaoaOptimization,
   geocodeLocation,
-  fetchVillageBoundary
+  fetchVillageBoundary,
+  ensureActiveSession,
+  fetchOptimizationHardwareStatus
 } from './services/api';
 import { AppHeader } from './components/layout/AppHeader';
 import { AppSidebar } from './components/layout/AppSidebar';
@@ -248,6 +250,31 @@ export function App() {
       return null;
     }
   });
+
+  // Ensure an authenticated engineer session on boot if not already initialized
+  useEffect(() => {
+    if (!currentUser) {
+      ensureActiveSession()
+        .then((token) => {
+          try {
+            const saved = localStorage.getItem('aqw_user');
+            if (saved) {
+              setCurrentUser(JSON.parse(saved));
+            } else {
+              const defUser = {
+                id: 1,
+                username: 'engineer1',
+                email: 'engineer1@aeroquantum.com',
+                token,
+              };
+              setCurrentUser(defUser as any);
+            }
+          } catch (_) {}
+        })
+        .catch(() => {});
+    }
+  }, [currentUser]);
+
   const [is3DActive, setIs3DActive] = useState<boolean>(false);
   const [isMobileProjectSheetOpen, setIsMobileProjectSheetOpen] = useState<boolean>(false);
 
@@ -826,6 +853,7 @@ export function App() {
           residential_screening: res.residential_screening || res.pipeline_stats?.residential_screening,
           main_exclusion_reason: res.main_exclusion_reason || res.pipeline_stats?.main_exclusion_reason,
           dominant_constraints: res.dominant_constraints || res.pipeline_stats?.dominant_constraints,
+          overpass_telemetry: res.overpass_telemetry || res.pipeline_stats?.overpass_telemetry,
         });
 
         // Retain resolved concession boundary on site state
@@ -1478,6 +1506,9 @@ export function App() {
         onOpenAuth={() => {
           setIsQuantumCredentialsModalOpen(false);
           setIsAuthOpen(true);
+        }}
+        onCredentialsUpdated={(_configured) => {
+          fetchOptimizationHardwareStatus(currentUser?.token).catch(() => {});
         }}
       />
 

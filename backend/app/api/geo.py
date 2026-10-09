@@ -329,6 +329,13 @@ async def get_site_land_data(
         "overall_status": suitability_res.overall_status,
         "elevation_samples": elevs,
         "active_constraints_count": len(suitability_res.active_constraints),
+        "overpass_features": suitability_res.infrastructure_assessment.get("counts", {
+            "buildings": 0,
+            "powerlines": 0,
+            "highways": 0,
+            "waterways": 0,
+        }),
+        "overpass_status": suitability_res.infrastructure_assessment.get("status", "READY"),
     }
 
     # 3. Save to database

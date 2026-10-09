@@ -207,3 +207,29 @@ def test_classical_and_aer_workflow_without_ibm_credentials():
     })
     assert aer_resp.status_code == 200
     assert aer_resp.json()["status"] in ["OPTIMAL_FOUND", "OPTIMIZATION_COMPLETED", "COMPLETED"]
+
+
+def test_guest_session_quantum_credential_flow():
+    """Verify that a guest session can configure and retrieve IBM Quantum credentials without errors."""
+    guest_resp = client.post("/api/auth/guest")
+    assert guest_resp.status_code == 200
+    token = guest_resp.json()["token"]
+    assert token is not None
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Save credentials via guest session
+    save_resp = client.post("/api/quantum/credentials", headers=headers, json={
+        "api_token": "ibm_guest_test_token_9876543210",
+        "crn": "crn:v1:bluemix:public:quantum:guest_inst",
+    })
+    assert save_resp.status_code == 200
+    assert save_resp.json()["configured"] is True
+
+    # Retrieve safe metadata via guest session
+    meta_resp = client.get("/api/quantum/credentials", headers=headers)
+    assert meta_resp.status_code == 200
+    meta = meta_resp.json()
+    assert meta["configured"] is True
+    assert meta["crn_configured"] is True
+    assert meta["token_masked"] == "••••••••••••••••"
+

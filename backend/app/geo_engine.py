@@ -395,7 +395,9 @@ class CandidateGenerationEngine:
 
         # Query real OSM infrastructure, WDPA conservation status, and land cover
         effective_radius = min(5.0, self.radius_km or (math.sqrt(self.area_km2 / math.pi) if self.area_km2 else 3.0))
+        t_overpass_0 = time.time()
         osm_query = overpass_client.query_physical_features(self.center_lat, self.center_lon, radius_km=effective_radius)
+        overpass_duration_s = round(time.time() - t_overpass_0, 2)
         osm_buildings = osm_query["features"]["buildings"]
         osm_powerlines = osm_query["features"]["powerlines"]
         osm_highways = osm_query["features"]["highways"]
@@ -686,6 +688,17 @@ class CandidateGenerationEngine:
             "main_exclusion_reason": main_exclusion_reason,
             "status_headline": "Site unsuitable for wind-farm development" if len(wind_filtered) == 0 else f"{len(wind_filtered)} feasible candidate coordinates identified",
             "dominant_constraints": dominant_constraints,
+            "overpass_telemetry": {
+                "latitude": round(self.center_lat, 7),
+                "longitude": round(self.center_lon, 7),
+                "duration_seconds": overpass_duration_s,
+                "buildings": len(osm_buildings),
+                "powerlines": len(osm_powerlines),
+                "highways": len(osm_highways),
+                "waterways": len(osm_waterways),
+                "total_features": len(osm_buildings) + len(osm_powerlines) + len(osm_highways) + len(osm_waterways),
+                "source": "OpenStreetMap Overpass API (Live Physical Infrastructure)"
+            },
             "engineering_compliance_notes": [
                 f"Residential screening: {residential_screening}",
                 "River & Wetland Riparian Corridors: 120m buffer (Hydrological stability & flood prevention)",
