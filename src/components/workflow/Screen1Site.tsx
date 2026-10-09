@@ -2492,21 +2492,63 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
           )}
 
           {/* Preliminary Geotechnical Screening Banner */}
-          <div id="soil-screening-banner" className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col gap-2">
+          <div id="soil-screening-banner" className={`p-3.5 rounded-2xl flex flex-col gap-2 border ${
+            hazardLevel === 'CRITICAL_BLOCKED'
+              ? 'bg-rose-500/10 border-rose-500/30'
+              : hazardLevel === 'WARNING'
+              ? 'bg-amber-500/10 border-amber-500/30'
+              : 'bg-emerald-500/10 border-emerald-500/30'
+          }`}>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-amber-950 dark:text-amber-200 flex items-center gap-1.5 uppercase tracking-wide">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>PRELIMINARY GEOTECHNICAL SCREENING</span>
+              <span className={`text-xs font-black uppercase tracking-wide flex items-center gap-1.5 ${
+                hazardLevel === 'CRITICAL_BLOCKED'
+                  ? 'text-rose-950 dark:text-rose-200'
+                  : hazardLevel === 'WARNING'
+                  ? 'text-amber-950 dark:text-amber-200'
+                  : 'text-emerald-950 dark:text-emerald-200'
+              }`}>
+                {hazardLevel === 'CRITICAL_BLOCKED' ? (
+                  <>
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>SOIL BLOCKED: LOW BEARING CAPACITY</span>
+                  </>
+                ) : hazardLevel === 'WARNING' ? (
+                  <>
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>GEOTECHNICAL ADVISORY: MEDIUM BEARING</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>GEOTECHNICALLY SUITABLE CONCESSION</span>
+                  </>
+                )}
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-200/90 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300 text-[10px] font-mono font-black uppercase">
-                Bearing capacity: {bearingKpa !== null ? `${bearingKpa} kPa` : 'UNKNOWN'}
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-black uppercase ${
+                hazardLevel === 'CRITICAL_BLOCKED'
+                  ? 'bg-rose-200/90 text-rose-900 dark:bg-rose-950/80 dark:text-rose-300'
+                  : hazardLevel === 'WARNING'
+                  ? 'bg-amber-200/90 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300'
+                  : 'bg-emerald-200/90 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-300'
+              }`}>
+                {hazardLevel === 'CRITICAL_BLOCKED'
+                  ? `BLOCKED (${bearingKpa !== null ? `${bearingKpa} kPa` : 'LOW'})`
+                  : `Bearing: ${bearingKpa !== null ? `${bearingKpa} kPa` : 'VERIFIED'}`}
               </span>
             </div>
-            <p className="text-[11px] text-amber-900 dark:text-amber-300 italic font-semibold leading-relaxed">
-              "Site-specific geotechnical investigation required before construction."
+            <p className={`text-[11px] italic font-semibold leading-relaxed ${
+              hazardLevel === 'CRITICAL_BLOCKED'
+                ? 'text-rose-900 dark:text-rose-300'
+                : hazardLevel === 'WARNING'
+                ? 'text-amber-900 dark:text-amber-300'
+                : 'text-emerald-900 dark:text-emerald-300'
+            }`}>
+              {hazardLevel === 'CRITICAL_BLOCKED'
+                ? 'Standard gravity base blocked due to low bearing capacity. Deep bored piles or bedrock anchor required.'
+                : 'Site-specific geotechnical investigation required before construction.'}
             </p>
-            <div className="text-[10px] text-slate-600 dark:text-slate-400 bg-white/70 dark:bg-slate-800/70 p-2 rounded-xl border border-amber-500/15">
-              ISRIC SoilGrids taxonomy: <strong className="text-slate-900 dark:text-white font-bold">{usdaClass}</strong> (Clay: {clayPct}%, Sand: {sandPct}%, Silt: {siltPct}%, Bulk Density: {bulkDensity} g/cm³). General soil classification does not constitute measured foundation bearing capacity.
+            <div className="text-[10px] text-slate-600 dark:text-slate-400 bg-white/70 dark:bg-slate-800/70 p-2 rounded-xl border border-slate-200 dark:border-white/10">
+              ISRIC SoilGrids taxonomy: <strong className="text-slate-900 dark:text-white font-bold">{usdaClass}</strong> (Clay: {clayPct}%, Sand: {sandPct}%, Silt: {siltPct}%, Bulk Density: {bulkDensity} g/cm³).
             </div>
           </div>
 

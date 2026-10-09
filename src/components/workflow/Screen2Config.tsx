@@ -618,7 +618,7 @@ export const Screen2Config: React.FC<Screen2ConfigProps> = ({
                 : 'bg-amber-100 text-amber-900 border-amber-300'
             }`}>
               {site.soil_hazard_level === 'CRITICAL_BLOCKED' || (site.soil_bearing_capacity_kpa && site.soil_bearing_capacity_kpa < 120)
-                ? 'Piles Mandatory'
+                ? 'Standard Pad Blocked (Piles Required)'
                 : (!site.soil_bearing_capacity_kpa || site.soil_bearing_capacity_kpa >= 160)
                 ? 'Geotechnically Certified'
                 : 'Geotechnical Advisory'}

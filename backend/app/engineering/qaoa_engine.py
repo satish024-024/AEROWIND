@@ -28,9 +28,17 @@ import numpy as np
 from pydantic import BaseModel, Field
 from scipy.optimize import minimize
 
-import qiskit
-from qiskit import QuantumCircuit, transpile
-from qiskit_aer import AerSimulator
+try:
+    import qiskit
+    from qiskit import QuantumCircuit, transpile
+    from qiskit_aer import AerSimulator
+    QISKIT_AVAILABLE = True
+except (ImportError, Exception):
+    qiskit = None
+    QuantumCircuit = Any
+    transpile = None
+    AerSimulator = None
+    QISKIT_AVAILABLE = False
 
 from backend.app.engineering.qubo_engine import QuboProblem, QuboBitstringEvaluation
 from backend.app.engineering.aep_engine import aep_calculation_engine, AepEvaluationResult
@@ -74,10 +82,12 @@ class AerSimulatorBackend(BaseQuantumBackend):
     def __init__(self, seed: Optional[int] = 42, max_qubits: int = 24):
         self.seed = seed
         self.max_qubits = max_qubits
-        self._simulator = AerSimulator()
-        self._status = "READY"
+        self._simulator = AerSimulator() if AerSimulator is not None else None
+        self._status = "READY" if self._simulator is not None else "SIMULATOR_UNAVAILABLE"
 
     def run_circuit(self, circuit: QuantumCircuit, shots: int = 1024) -> Dict[str, int]:
+        if not self._simulator:
+            raise RuntimeError("Qiskit Aer simulator is not available in this environment.")
         if circuit.num_qubits > self.max_qubits:
             raise ValueError(
                 f"Circuit width ({circuit.num_qubits} qubits) exceeds simulator limit ({self.max_qubits} qubits)."
@@ -88,7 +98,7 @@ class AerSimulatorBackend(BaseQuantumBackend):
         return result.get_counts()
 
     def is_available(self) -> bool:
-        return True
+        return self._simulator is not None
 
     def get_status(self) -> str:
         return self._status
@@ -98,7 +108,7 @@ class AerSimulatorBackend(BaseQuantumBackend):
             "backend_name": "qiskit_aer_simulator",
             "backend_type": "QUANTUM_SIMULATOR",
             "is_hardware": False,
-            "qiskit_version": qiskit.__version__,
+            "qiskit_version": getattr(qiskit, "__version__", "unavailable") if qiskit else "none",
             "status": self._status,
             "seed": self.seed,
             "max_qubits": self.max_qubits,
