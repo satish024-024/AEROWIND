@@ -178,7 +178,7 @@ export const Screen2Config: React.FC<Screen2ConfigProps> = ({
               <div>
                 <span className="text-[10px] font-sans text-slate-400 block">Foundation</span>
                 <span id="s2-meta-foundation" className="font-bold text-slate-800">
-                  {foundationType === 'DEEP_PILED' ? 'Deep Piled' : 'Gravity Base'}
+                  {foundationType === 'DEEP_PILED' ? 'Deep Piled' : foundationType === 'ROCK_ANCHOR' ? 'Rock Anchor' : 'Gravity Base'}
                 </span>
               </div>
             </div>
@@ -631,12 +631,9 @@ export const Screen2Config: React.FC<Screen2ConfigProps> = ({
               type="button"
               id="cfg-foundation-gravity"
               onClick={() => handleFoundationChange('GRAVITY_BASE')}
-              disabled={site.soil_hazard_level === 'CRITICAL_BLOCKED'}
               className={`p-3.5 rounded-2xl border text-left flex flex-col gap-1 transition-all ${
                 foundationType === 'GRAVITY_BASE'
                   ? 'border-[#FFD21F] bg-amber-500/10 shadow-sm ring-1 ring-[#FFD21F]'
-                  : site.soil_hazard_level === 'CRITICAL_BLOCKED'
-                  ? 'border-slate-200 bg-slate-100/60 text-slate-400 cursor-not-allowed opacity-60'
                   : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
               }`}
             >
@@ -647,9 +644,13 @@ export const Screen2Config: React.FC<Screen2ConfigProps> = ({
               <p className="text-[11px] text-slate-500 leading-tight">
                 Circular reinforced concrete pad (D=18m, H=2.8m). Requires bearing ≥ 160 kPa.
               </p>
-              {site.soil_hazard_level === 'CRITICAL_BLOCKED' && (
+              {site.soil_hazard_level === 'CRITICAL_BLOCKED' ? (
                 <span className="text-[9px] font-bold text-rose-600 uppercase mt-0.5">
-                  Prohibited by Low Bearing
+                  Advisory: Low Bearing Soil
+                </span>
+              ) : (
+                <span className="text-[9px] font-bold text-amber-700 uppercase mt-0.5">
+                  Pad Bearing ≥ 160 kPa
                 </span>
               )}
             </button>

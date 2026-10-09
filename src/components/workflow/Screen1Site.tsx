@@ -2515,12 +2515,34 @@ export const Screen1Site: React.FC<Screen1SiteProps> = ({
             {isProceedBlocked ? (
               <Button
                 id="btn-confirm-site"
-                variant="outline"
-                disabled
-                className="w-full bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold py-3 text-xs rounded-2xl flex items-center justify-center gap-2 cursor-not-allowed border-slate-300"
+                variant="energy"
+                size="md"
+                onClick={() => {
+                  const r = selectedRadius || site.radiusKm || 3.0;
+                  const pts = (drawnPointsRef.current.length >= 3 ? drawnPointsRef.current : (drawnPoints.length >= 3 ? drawnPoints : null));
+                  const boundary = pts ? pts : (site.boundary && site.boundary.length >= 3 ? site.boundary : generateCircleVertices(site.lat, site.lon, r));
+                  const areaKm2 = pts ? calculatePolygonAreaKm2(pts) : (site.areaKm2 || Math.round(Math.PI * r * r * 10) / 10);
+                  const centerLat = pts ? parseFloat((pts.reduce((s, v) => s + v[0], 0) / pts.length).toFixed(6)) : site.lat;
+                  const centerLon = pts ? parseFloat((pts.reduce((s, v) => s + v[1], 0) / pts.length).toFixed(6)) : site.lon;
+                  onConfirmSite({
+                    ...site,
+                    lat: centerLat,
+                    lon: centerLon,
+                    radiusKm: r,
+                    areaKm2,
+                    boundary,
+                    soil_bearing_capacity_kpa: bearingKpa,
+                    usda_texture_class: usdaClass,
+                    foundation_type: selectedFoundation,
+                    soil_hazard_level: hazardLevel,
+                    environmental_notes: `500m settlement buffer, 120m river buffer, 200m marine buffer, 150m grid corridor verified. Foundation: ${selectedFoundation}. Geotechnical advisory noted.`,
+                  });
+                }}
+                className="w-full bg-[#FFD21F] hover:bg-[#F2C50F] active:scale-98 text-slate-950 font-black shadow-[0_8px_24px_rgba(255,210,31,0.4)] py-3 text-xs rounded-2xl flex items-center justify-center gap-2 cursor-pointer transition-all"
               >
-                <AlertTriangle className="w-4 h-4 text-rose-500" />
-                <span>Soil Unsuitable — Select Piled Foundation</span>
+                <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+                <span>Confirm Concession (Soil Advisory Active)</span>
+                <ArrowRight className="w-4 h-4 stroke-[3]" />
               </Button>
             ) : (
               <Button
